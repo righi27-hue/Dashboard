@@ -245,19 +245,19 @@ password: MQTT_PASSWORD,
     reconnectPeriod: 2000
 });
 
-mqttmqttmqttClient.on("connect", () => {
+mqttClient.on("connect", () => {
     updateWSStatus(true);
 
-    mqttmqttmqttClient.subscribe("esp32/live");
-    mqttmqttClient.subscribe("esp32/history_chunk");
-    mqttmqttClient.subscribe("esp32/relay_state");
+    mqttClient.subscribe("esp32/live");
+    mqttClient.subscribe("esp32/history_chunk");
+    mqttClient.subscribe("esp32/relay_state");
 });
 
-mqttmqttClient.on("close", () => updateWSStatus(false));
-mqttmqttClient.on("error", () => updateWSStatus(false));
+mqttClient.on("close", () => updateWSStatus(false));
+mqttClient.on("error", () => updateWSStatus(false));
 
 // ===================== MQTT MESSAGE HANDLER =====================
-mqttmqttClient.on("message", (topic, message) => {
+mqttClient.on("message", (topic, message) => {
     let d;
     try { d = JSON.parse(message.toString()); }
     catch { return; }
@@ -339,7 +339,7 @@ mqttmqttClient.on("message", (topic, message) => {
 
 // ===================== RELAY COMMAND =====================
 function sendRelayCommand(id, state) {
-    mqttmqttClient.publish(`esp32/cmd/relay${id}`, state ? "1" : "0");
+    mqttClient.publish(`esp32/cmd/relay${id}`, state ? "1" : "0");
 }
 
 // ===================== RELAY LISTENERS =====================
@@ -406,7 +406,7 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
         sensors: sensors
     };
 
-    mqttmqttClient.publish("esp32/history/request", JSON.stringify(req));
+    mqttClient.publish("esp32/history/request", JSON.stringify(req));
 });
 
 // ===================== STORICO PACKET HANDLER =====================
@@ -465,4 +465,5 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
