@@ -1,4 +1,7 @@
 // worker.js
+// Riceve { payloadStr, targetSamples } dal main thread.
+// Restituisce { ok:true, data: { timestamps, temp, hum, press, co2, tvoc, pm25, chunkId, done } }
+
 function downsampleArray(values, targetLen) {
   if (!Array.isArray(values)) return [];
   const n = values.length;
@@ -12,30 +15,30 @@ function downsampleArray(values, targetLen) {
 }
 
 self.onmessage = function(e) {
-  const { payloadStr, targetSamples } = e.data;
+  const { payloadStr, targetSamples } = e.data || {};
   try {
     console.time('worker_parse');
     const obj = JSON.parse(payloadStr);
     console.timeEnd('worker_parse');
 
-    const ts = obj.timestamps || [];
-    const data = obj.data || {};
+    const ts = Array.isArray(obj.timestamps) ? obj.timestamps : [];
+    const data = (obj.data && typeof obj.data === 'object') ? obj.data : {};
     const target = Math.max(1, targetSamples || 1500);
 
     const result = {
       timestamps: downsampleArray(ts, target),
-      temp: downsampleArray(data.temp || [], target),
-      hum:  downsampleArray(data.hum  || [], target),
-      press:downsampleArray(data.press|| [], target),
-      co2:  downsampleArray(data.co2  || [], target),
-      tvoc: downsampleArray(data.tvoc || [], target),
-      pm25: downsampleArray(data.pm25 || [], target),
+      temp:  downsampleArray(data.temp  || [], target),
+      hum:   downsampleArray(data.hum   || [], target),
+      press: downsampleArray(data.press || [], target),
+      co2:   downsampleArray(data.co2   || [], target),
+      tvoc:  downsampleArray(data.tvoc  || [], target),
+      pm25:  downsampleArray(data.pm25  || [], target),
       chunkId: obj.chunkId || 0,
       done: !!obj.done
     };
 
     self.postMessage({ ok: true, data: result });
   } catch (err) {
-    self.postMessage({ ok: false, error: err.message });
+    self.postMessage({ ok: false, error: err && err.message ? err.message : String(err) });
   }
 };
