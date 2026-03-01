@@ -258,6 +258,7 @@ mqttClient.on("error", () => updateWSStatus(false));
 
 // ===================== MQTT MESSAGE HANDLER =====================
 mqttClient.on("message", (topic, message) => {
+    console.log("[MQTT RX]", topic, message.toString());
     let d;
     try { d = JSON.parse(message.toString()); }
     catch { return; }
@@ -465,5 +466,6 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
 
