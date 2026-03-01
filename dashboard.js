@@ -190,7 +190,6 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         }
     }
 });
-
 // ===================== CHECKBOX STORICO =====================
 document.querySelectorAll(".histCheck").forEach(chk => {
     chk.addEventListener("change", () => {
@@ -237,10 +236,11 @@ function aiqColor(v) {
 
 // ===================== MQTT CLOUD CONNECTION =====================
 let ignoreToggleEvents = false;
+let expectedChunkId = 0; // usato per ignorare duplicati/out-of-order
 
 window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
-username: MQTT_USERNAME,
-password: MQTT_PASSWORD,
+    username: MQTT_USERNAME,
+    password: MQTT_PASSWORD,
     clean: true,
     reconnectPeriod: 2000
 });
@@ -321,8 +321,40 @@ mqttClient.on("message", (topic, message) => {
 
     // ===== STORICO CHUNK =====
     if (topic === "esp32/history_chunk") {
+      try {
+        // pacchetto END
+        if (d.done === true) {
+          console.log("[MQTT] history done");
+          return;
+        }
+
+        // controllo ordine opzionale
+        if (typeof d.chunkId === "number") {
+          if (d.chunkId < expectedChunkId) {
+            console.log("[MQTT] chunk duplicato/vecchio, ignoro chunkId=", d.chunkId);
+            return;
+          }
+        }
+
+        // processa il chunk (popola historyCustom)
         handleHistoryPacket(d);
-        return;
+
+        // invia ACK dopo il processing; non si invia ACK per il pacchetto done
+        setTimeout(() => {
+          try {
+            const ack = { chunkId: d.chunkId || 0 };
+            mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
+            console.log("[MQTT] ACK inviato chunkId=", ack.chunkId);
+            if (typeof d.chunkId === "number") expectedChunkId = d.chunkId + 1;
+          } catch (e) {
+            console.error("Errore invio ACK:", e);
+          }
+        }, 0);
+
+      } catch (e) {
+        console.error("Errore processing history_chunk:", e);
+      }
+      return;
     }
 
     // ===== RELAY STATE =====
@@ -337,7 +369,6 @@ mqttClient.on("message", (topic, message) => {
         return;
     }
 });
-
 // ===================== RELAY COMMAND =====================
 function sendRelayCommand(id, state) {
     mqttClient.publish(`esp32/cmd/relay${id}`, state ? "1" : "0");
@@ -466,6 +497,5 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
-
 
 
