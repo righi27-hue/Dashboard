@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
+<!-- MQTT client -->
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div id="ws_status" class="ws_status ws_disconnected">🔴 Disconnesso</div>
+
+<h2>Dashboard</h2>
+
+<div class="grid">
+    <div class="card">
+        <span class="material-symbols-outlined icon">co2</span>
+        <div class="gauge"><canvas id="g_co2"></canvas></div>
+        <div id="co2" class="value">--</div>
+    </div>
+
+    <div class="card">
+        <span class="material-symbols-outlined icon">Aq_Indoor</span>
+        <div class="gauge"><canvas id="g_tvoc"></canvas></div>
+        <div id="tvoc" class="value">--</div>
+    </div>
+
+    <div class="card">
+        <span class="material-symbols-outlined icon">blur_on</span>
+        <div class="gauge"><canvas id="g_pm25"></canvas></div>
+        <div id="pm25" class="value">--</div>
+    </div>
+
+    <div class="card">
+        <span class="material-symbols-outlined icon">air</span>
+        <div class="gauge"><canvas id="g_aiq"></canvas></div>
+        <div id="aiq" class="value">--</div>
+    </div>
+
+    <div class="card">
+        <span class="material-symbols-outlined icon">device_thermostat</span>
+        <div class="gauge"><canvas id="g_temp"></canvas></div>
+        <div id="temp" class="value">--</div>
+    </div>
+
+    <div class="card">
+        <span class="material-symbols-outlined icon">dew_point</span>
+        <div class="gauge"><canvas id="g_hum"></canvas></div>
+        <div id="hum" class="value">--</div>
+    </div>
+
+    <div class="card">
+        <span class="material-symbols-outlined icon">speed</span>
+        <div class="gauge"><canvas id="g_press"></canvas></div>
+        <div id="press" class="value">--</div>
+    </div>
+</div>
+
+<h2>Outputs</h2>
+
+<div class="relay-row-dual">
+
+    <div class="relay-item">
+        <span class="relay-label">Relay 1</span>
+
+        <span class="material-symbols-outlined relay-icon" id="relay1_icon">
+            power_settings_new
+        </span>
+
+        <label class="switch relay-switch">
+            <input type="checkbox" id="relay1_toggle">
+            <span class="slider"></span>
+        </label>
+    </div>
+
+    <div class="relay-item">
+        <span class="relay-label">Relay 2</span>
+
+        <span class="material-symbols-outlined relay-icon" id="relay2_icon">
+            power_settings_new
+        </span>
+
+        <label class="switch relay-switch">
+            <input type="checkbox" id="relay2_toggle">
+            <span class="slider"></span>
+        </label>
+    </div>
+
+</div>
+
+<h2>Live</h2>
+
+<div class="selector">
+    <label><input type="checkbox" class="sensorCheck" value="temp" checked><span>Temp</span></label>
+    <label><input type="checkbox" class="sensorCheck" value="hum" checked><span>Hum</span></label>
+    <label><input type="checkbox" class="sensorCheck" value="press"><span>Press</span></label>
+    <label><input type="checkbox" class="sensorCheck" value="co2"><span>CO₂</span></label>
+    <label><input type="checkbox" class="sensorCheck" value="tvoc"><span>TVOC</span></label>
+    <label><input type="checkbox" class="sensorCheck" value="pm25"><span>PM2.5</span></label>
+</div>
+
+<canvas id="chart_history"></canvas>
+
+<h2>Historic</h2>
+
+<div class="selector">
+    <label><input type="checkbox" class="histCheck" value="temp" checked><span>Temp</span></label>
+    <label><input type="checkbox" class="histCheck" value="hum" checked><span>Hum</span></label>
+    <label><input type="checkbox" class="histCheck" value="press"><span>Press</span></label>
+    <label><input type="checkbox" class="histCheck" value="co2"><span>CO₂</span></label>
+    <label><input type="checkbox" class="histCheck" value="tvoc"><span>TVOC</span></label>
+    <label><input type="checkbox" class="histCheck" value="pm25"><span>PM2.5</span></label>
+
+    <label style="margin-left:10px;">
+        <input type="checkbox" id="smooth_mode">
+        Smooth
+    </label>
+</div>
+
+<div style="text-align:center; margin-bottom:10px;">
+    <input type="datetime-local" id="hist_from">
+    <input type="datetime-local" id="hist_to">
+    <button id="btn_load_history">Carica storico</button>
+</div>
+
+<canvas id="chart_history_custom"></canvas>
+
+<!-- 🔐 Carica prima le credenziali -->
+<script src="config.js"></script>
+
+<!-- 🔧 Poi la logica della dashboard -->
+<script src="dashboard.js"></script>
+
+</body>
+</html>
