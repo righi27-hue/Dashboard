@@ -238,7 +238,7 @@ function aiqColor(v) {
 // ===================== MQTT CLOUD CONNECTION =====================
 let ignoreToggleEvents = false;
 
-const client = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
+window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
 username: MQTT_USERNAME,
 password: MQTT_PASSWORD,
     clean: true,
@@ -464,4 +464,5 @@ function handleHistoryPacket(d) {
     }
 
     chart_history_custom.update();
+
 }
