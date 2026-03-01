@@ -245,7 +245,7 @@ password: MQTT_PASSWORD,
     reconnectPeriod: 2000
 });
 
-client.on("connect", () => {
+mqttClient.on("connect", () => {
     updateWSStatus(true);
 
     client.subscribe("esp32/live");
@@ -466,3 +466,4 @@ function handleHistoryPacket(d) {
     chart_history_custom.update();
 
 }
+
