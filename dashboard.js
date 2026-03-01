@@ -320,42 +320,33 @@ mqttClient.on("message", (topic, message) => {
     }
 
     // ===== STORICO CHUNK =====
-    if (topic === "esp32/history_chunk") {
-      try {
-        // pacchetto END
-        if (d.done === true) {
-          console.log("[MQTT] history done");
-          return;
+if (topic === "esp32/history_chunk") {
+  try {
+    console.log("[MQTT] history_chunk ricevuto, chunkId=", d.chunkId, " done=", !!d.done);
+
+    // processa sempre il pacchetto (anche se done === true)
+    handleHistoryPacket(d);
+
+    // invia ACK solo se non è il pacchetto finale (opzionale: invia anche per done se vuoi)
+    if (!d.done) {
+      setTimeout(() => {
+        try {
+          const ack = { chunkId: d.chunkId || 0 };
+          mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
+          console.log("[MQTT] ACK inviato chunkId=", ack.chunkId);
+        } catch (e) {
+          console.error("Errore invio ACK:", e);
         }
-
-        // controllo ordine opzionale
-        if (typeof d.chunkId === "number") {
-          if (d.chunkId < expectedChunkId) {
-            console.log("[MQTT] chunk duplicato/vecchio, ignoro chunkId=", d.chunkId);
-            return;
-          }
-        }
-
-        // processa il chunk (popola historyCustom)
-        handleHistoryPacket(d);
-
-        // invia ACK dopo il processing; non si invia ACK per il pacchetto done
-        setTimeout(() => {
-          try {
-            const ack = { chunkId: d.chunkId || 0 };
-            mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
-            console.log("[MQTT] ACK inviato chunkId=", ack.chunkId);
-            if (typeof d.chunkId === "number") expectedChunkId = d.chunkId + 1;
-          } catch (e) {
-            console.error("Errore invio ACK:", e);
-          }
-        }, 0);
-
-      } catch (e) {
-        console.error("Errore processing history_chunk:", e);
-      }
-      return;
+      }, 0);
+    } else {
+      console.log("[MQTT] history done processato (grafico aggiornato se c'erano dati)");
     }
+
+  } catch (e) {
+    console.error("Errore processing history_chunk:", e);
+  }
+  return;
+}
 
     // ===== RELAY STATE =====
     if (topic === "esp32/relay_state") {
@@ -497,5 +488,6 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
 
