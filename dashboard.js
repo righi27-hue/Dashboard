@@ -238,26 +238,26 @@ function aiqColor(v) {
 // ===================== MQTT CLOUD CONNECTION =====================
 let ignoreToggleEvents = false;
 
-window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
+window.mqttmqttmqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
 username: MQTT_USERNAME,
 password: MQTT_PASSWORD,
     clean: true,
     reconnectPeriod: 2000
 });
 
-mqttClient.on("connect", () => {
+mqttmqttmqttClient.on("connect", () => {
     updateWSStatus(true);
 
-    client.subscribe("esp32/live");
-    client.subscribe("esp32/history_chunk");
-    client.subscribe("esp32/relay_state");
+    mqttmqttmqttClient.subscribe("esp32/live");
+    mqttmqttClient.subscribe("esp32/history_chunk");
+    mqttmqttClient.subscribe("esp32/relay_state");
 });
 
-client.on("close", () => updateWSStatus(false));
-client.on("error", () => updateWSStatus(false));
+mqttmqttClient.on("close", () => updateWSStatus(false));
+mqttmqttClient.on("error", () => updateWSStatus(false));
 
 // ===================== MQTT MESSAGE HANDLER =====================
-client.on("message", (topic, message) => {
+mqttmqttClient.on("message", (topic, message) => {
     let d;
     try { d = JSON.parse(message.toString()); }
     catch { return; }
@@ -339,7 +339,7 @@ client.on("message", (topic, message) => {
 
 // ===================== RELAY COMMAND =====================
 function sendRelayCommand(id, state) {
-    client.publish(`esp32/cmd/relay${id}`, state ? "1" : "0");
+    mqttmqttClient.publish(`esp32/cmd/relay${id}`, state ? "1" : "0");
 }
 
 // ===================== RELAY LISTENERS =====================
@@ -406,7 +406,7 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
         sensors: sensors
     };
 
-    client.publish("esp32/history/request", JSON.stringify(req));
+    mqttmqttClient.publish("esp32/history/request", JSON.stringify(req));
 });
 
 // ===================== STORICO PACKET HANDLER =====================
@@ -464,6 +464,4 @@ function handleHistoryPacket(d) {
     }
 
     chart_history_custom.update();
-
 }
-
