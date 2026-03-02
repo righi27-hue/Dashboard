@@ -100,10 +100,12 @@
 
         document.getElementById("loginModal").style.display = "none";
 
-        // Carica la dashboard solo dopo il login
-        const script = document.createElement("script");
-        script.src = "dashboard.js";
-        document.body.appendChild(script);
+        // Avvia solo ora la connessione MQTT (definita in dashboard.js)
+        if (typeof startMQTT === "function") {
+            startMQTT();
+        } else {
+            console.error("startMQTT non è definita (controlla dashboard.js)");
+        }
     }
 </script>
 
@@ -224,6 +226,9 @@
 </div>
 
 <canvas id="chart_history_custom"></canvas>
+
+<!-- Caricamento NORMALE della logica dashboard -->
+<script src="dashboard.js"></script>
 
 </body>
 </html>
