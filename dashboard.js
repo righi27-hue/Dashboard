@@ -21,15 +21,14 @@ function createGauge(ctx, color) {
 // ===================== CREAZIONE GAUGE =====================
 let g_co2, g_tvoc, g_pm25, g_aiq, g_temp, g_hum, g_press;
 
-window.addEventListener("load", () => {
-    g_co2  = createGauge(document.getElementById("g_co2"),  "#ff5252");
-    g_tvoc = createGauge(document.getElementById("g_tvoc"), "#ffa726");
-    g_pm25 = createGauge(document.getElementById("g_pm25"), "#ab47bc");
-    g_aiq  = createGauge(document.getElementById("g_aiq"),  "#00e676");
-    g_temp = createGauge(document.getElementById("g_temp"), "#29b6f6");
-    g_hum  = createGauge(document.getElementById("g_hum"),  "#fdd835");
-    g_press= createGauge(document.getElementById("g_press"),"#66bb6a");
-});
+// a questo punto il DOM è già pronto (script caricato dopo il login)
+g_co2  = createGauge(document.getElementById("g_co2"),  "#ff5252");
+g_tvoc = createGauge(document.getElementById("g_tvoc"), "#ffa726");
+g_pm25 = createGauge(document.getElementById("g_pm25"), "#ab47bc");
+g_aiq  = createGauge(document.getElementById("g_aiq"),  "#00e676");
+g_temp = createGauge(document.getElementById("g_temp"), "#29b6f6");
+g_hum  = createGauge(document.getElementById("g_hum"),  "#fdd835");
+g_press= createGauge(document.getElementById("g_press"),"#66bb6a");
 
 // ===================== LIVE HISTORY DATA =====================
 let MAX_POINTS = 300;
@@ -487,6 +486,7 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
 
 
