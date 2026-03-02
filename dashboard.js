@@ -258,7 +258,6 @@ function startMQTT() {
 
     mqttClient.on("message", (topic, message) => {
 
-        console.log("[MQTT RX]", topic, message.toString());
         let d;
         try { d = JSON.parse(message.toString()); }
         catch { return; }
@@ -321,27 +320,14 @@ function startMQTT() {
 
         // ===== STORICO CHUNK =====
         if (topic === "esp32/history_chunk") {
-            try {
-                console.log("[MQTT] history_chunk ricevuto, chunkId=", d.chunkId, " done=", !!d.done);
-                handleHistoryPacket(d);
 
-                if (!d.done) {
-                    setTimeout(() => {
-                        try {
-                            const ack = { chunkId: d.chunkId || 0 };
-                            mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
-                            console.log("[MQTT] ACK inviato chunkId=", ack.chunkId);
-                        } catch (e) {
-                            console.error("Errore invio ACK:", e);
-                        }
-                    }, 0);
-                } else {
-                    console.log("[MQTT] history done processato");
-                }
+            handleHistoryPacket(d);
 
-            } catch (e) {
-                console.error("Errore processing history_chunk:", e);
+            if (!d.done) {
+                const ack = { chunkId: d.chunkId || 0 };
+                mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
             }
+
             return;
         }
 
@@ -487,6 +473,7 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
 
 
