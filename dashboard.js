@@ -21,7 +21,7 @@ function createGauge(ctx, color) {
 // ===================== CREAZIONE GAUGE =====================
 let g_co2, g_tvoc, g_pm25, g_aiq, g_temp, g_hum, g_press;
 
-// a questo punto il DOM è già pronto (script caricato dopo il login)
+// DOM già pronto (dashboard.js caricato normalmente)
 g_co2  = createGauge(document.getElementById("g_co2"),  "#ff5252");
 g_tvoc = createGauge(document.getElementById("g_tvoc"), "#ffa726");
 g_pm25 = createGauge(document.getElementById("g_pm25"), "#ab47bc");
@@ -189,6 +189,7 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         }
     }
 });
+
 // ===================== CHECKBOX STORICO =====================
 document.querySelectorAll(".histCheck").forEach(chk => {
     chk.addEventListener("change", () => {
@@ -198,6 +199,7 @@ document.querySelectorAll(".histCheck").forEach(chk => {
         chart_history_custom.update();
     });
 });
+
 // ===================== SMOOTH MODE =====================
 document.getElementById("smooth_mode").addEventListener("change", (e) => {
     let smooth = e.target.checked;
@@ -222,7 +224,6 @@ function updateWSStatus(connected) {
         el.classList.add("ws_disconnected");
     }
 }
-
 // ===================== AIQ COLOR SCALE =====================
 function aiqColor(v) {
     if (v <= 50)  return "#00e676";
@@ -234,9 +235,10 @@ function aiqColor(v) {
 
 // ===================== MQTT CLOUD CONNECTION =====================
 let ignoreToggleEvents = false;
-let expectedChunkId = 0; // usato per ignorare duplicati/out-of-order
+let expectedChunkId = 0;
 
 function startMQTT() {
+
     window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
         username: MQTT_USERNAME,
         password: MQTT_PASSWORD,
@@ -255,126 +257,108 @@ function startMQTT() {
     mqttClient.on("error", () => updateWSStatus(false));
 
     mqttClient.on("message", (topic, message) => {
-        // tutto il tuo handler rimane identico
-        ...
+
+        console.log("[MQTT RX]", topic, message.toString());
+        let d;
+        try { d = JSON.parse(message.toString()); }
+        catch { return; }
+
+        // ===== LIVE DATA =====
+        if (topic === "esp32/live") {
+
+            document.getElementById("co2").innerText  = d.co2;
+            document.getElementById("tvoc").innerText = d.tvoc;
+            document.getElementById("pm25").innerText = d.pm25;
+            document.getElementById("aiq").innerText  = d.aiq;
+            document.getElementById("temp").innerText = d.temp;
+            document.getElementById("hum").innerText  = d.hum;
+            document.getElementById("press").innerText= d.press;
+
+            g_co2.data.datasets[0].data  = [d.co2/20, 100-(d.co2/20)];
+            g_tvoc.data.datasets[0].data = [d.tvoc/10, 100-(d.tvoc/10)];
+            g_pm25.data.datasets[0].data = [d.pm25, 100-d.pm25];
+
+            let aiqVal = Math.min(d.aiq, 500) / 5;
+            let aiqCol = aiqColor(d.aiq);
+            g_aiq.data.datasets[0].backgroundColor[0] = aiqCol;
+            g_aiq.data.datasets[0].data = [aiqVal, 100 - aiqVal];
+
+            g_temp.data.datasets[0].data = [d.temp, 100-d.temp];
+            g_hum.data.datasets[0].data  = [d.hum, 100-d.hum];
+            g_press.data.datasets[0].data= [(d.press-980)/0.4, 100-((d.press-980)/0.4)];
+
+            g_co2.update();
+            g_tvoc.update();
+            g_pm25.update();
+            g_aiq.update();
+            g_temp.update();
+            g_hum.update();
+            g_press.update();
+
+            let now = new Date();
+            let timeStr = now.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            historyData.labels.push(timeStr);
+            historyData.temp.push(d.temp);
+            historyData.hum.push(d.hum);
+            historyData.press.push(d.press);
+            historyData.co2.push(d.co2);
+            historyData.tvoc.push(d.tvoc);
+            historyData.pm25.push(d.pm25);
+
+            if (historyData.labels.length > MAX_POINTS) {
+                Object.keys(historyData).forEach(k => historyData[k].shift());
+            }
+
+            updateYAxisRange();
+            chart_history.update();
+            return;
+        }
+
+        // ===== STORICO CHUNK =====
+        if (topic === "esp32/history_chunk") {
+            try {
+                console.log("[MQTT] history_chunk ricevuto, chunkId=", d.chunkId, " done=", !!d.done);
+                handleHistoryPacket(d);
+
+                if (!d.done) {
+                    setTimeout(() => {
+                        try {
+                            const ack = { chunkId: d.chunkId || 0 };
+                            mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
+                            console.log("[MQTT] ACK inviato chunkId=", ack.chunkId);
+                        } catch (e) {
+                            console.error("Errore invio ACK:", e);
+                        }
+                    }, 0);
+                } else {
+                    console.log("[MQTT] history done processato");
+                }
+
+            } catch (e) {
+                console.error("Errore processing history_chunk:", e);
+            }
+            return;
+        }
+
+        // ===== RELAY STATE =====
+        if (topic === "esp32/relay_state") {
+
+            ignoreToggleEvents = true;
+
+            document.getElementById("relay1_toggle").checked = d.r1;
+            document.getElementById("relay2_toggle").checked = d.r2;
+
+            ignoreToggleEvents = false;
+            return;
+        }
     });
 }
 
-mqttClient.on("connect", () => {
-    updateWSStatus(true);
-
-    mqttClient.subscribe("esp32/live");
-    mqttClient.subscribe("esp32/history_chunk");
-    mqttClient.subscribe("esp32/relay_state");
-});
-
-mqttClient.on("close", () => updateWSStatus(false));
-mqttClient.on("error", () => updateWSStatus(false));
-
-// ===================== MQTT MESSAGE HANDLER =====================
-mqttClient.on("message", (topic, message) => {
-    console.log("[MQTT RX]", topic, message.toString());
-    let d;
-    try { d = JSON.parse(message.toString()); }
-    catch { return; }
-
-    // ===== LIVE DATA =====
-    if (topic === "esp32/live") {
-
-        document.getElementById("co2").innerText  = d.co2;
-        document.getElementById("tvoc").innerText = d.tvoc;
-        document.getElementById("pm25").innerText = d.pm25;
-        document.getElementById("aiq").innerText  = d.aiq;
-        document.getElementById("temp").innerText = d.temp;
-        document.getElementById("hum").innerText  = d.hum;
-        document.getElementById("press").innerText= d.press;
-
-        g_co2.data.datasets[0].data  = [d.co2/20, 100-(d.co2/20)];
-        g_tvoc.data.datasets[0].data = [d.tvoc/10, 100-(d.tvoc/10)];
-        g_pm25.data.datasets[0].data = [d.pm25, 100-d.pm25];
-
-        let aiqVal = Math.min(d.aiq, 500) / 5;
-        let aiqCol = aiqColor(d.aiq);
-        g_aiq.data.datasets[0].backgroundColor[0] = aiqCol;
-        g_aiq.data.datasets[0].data = [aiqVal, 100 - aiqVal];
-
-        g_temp.data.datasets[0].data = [d.temp, 100-d.temp];
-        g_hum.data.datasets[0].data  = [d.hum, 100-d.hum];
-        g_press.data.datasets[0].data= [(d.press-980)/0.4, 100-((d.press-980)/0.4)];
-
-        g_co2.update();
-        g_tvoc.update();
-        g_pm25.update();
-        g_aiq.update();
-        g_temp.update();
-        g_hum.update();
-        g_press.update();
-
-        let now = new Date();
-        let timeStr = now.toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-
-        historyData.labels.push(timeStr);
-        historyData.temp.push(d.temp);
-        historyData.hum.push(d.hum);
-        historyData.press.push(d.press);
-        historyData.co2.push(d.co2);
-        historyData.tvoc.push(d.tvoc);
-        historyData.pm25.push(d.pm25);
-
-        if (historyData.labels.length > MAX_POINTS) {
-            Object.keys(historyData).forEach(k => historyData[k].shift());
-        }
-
-        updateYAxisRange();
-        chart_history.update();
-        return;
-    }
-
-    // ===== STORICO CHUNK =====
-if (topic === "esp32/history_chunk") {
-  try {
-    console.log("[MQTT] history_chunk ricevuto, chunkId=", d.chunkId, " done=", !!d.done);
-
-    // processa sempre il pacchetto (anche se done === true)
-    handleHistoryPacket(d);
-
-    // invia ACK solo se non è il pacchetto finale (opzionale: invia anche per done se vuoi)
-    if (!d.done) {
-      setTimeout(() => {
-        try {
-          const ack = { chunkId: d.chunkId || 0 };
-          mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
-          console.log("[MQTT] ACK inviato chunkId=", ack.chunkId);
-        } catch (e) {
-          console.error("Errore invio ACK:", e);
-        }
-      }, 0);
-    } else {
-      console.log("[MQTT] history done processato (grafico aggiornato se c'erano dati)");
-    }
-
-  } catch (e) {
-    console.error("Errore processing history_chunk:", e);
-  }
-  return;
-}
-
-    // ===== RELAY STATE =====
-    if (topic === "esp32/relay_state") {
-
-        ignoreToggleEvents = true;
-
-        document.getElementById("relay1_toggle").checked = d.r1;
-        document.getElementById("relay2_toggle").checked = d.r2;
-
-        ignoreToggleEvents = false;
-        return;
-    }
-});
 // ===================== RELAY COMMAND =====================
 function sendRelayCommand(id, state) {
     mqttClient.publish(`esp32/cmd/relay${id}`, state ? "1" : "0");
@@ -503,8 +487,6 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
-
-
 
 
 
