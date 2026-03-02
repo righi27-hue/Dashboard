@@ -17,6 +17,97 @@
 
 <body>
 
+<!-- 🔐 LOGIN MODAL (Dark Mode) -->
+<div id="loginModal" style="
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
+    z-index: 9999;
+">
+    <div style="
+        background: rgba(20,20,20,0.85);
+        padding: 28px;
+        border-radius: 14px;
+        width: 300px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: #f2f2f2;
+        border: 1px solid rgba(255,255,255,0.08);
+        backdrop-filter: blur(12px);
+    ">
+        <h3 style="margin-top:0; text-align:center; font-weight:600;">Accesso MQTT</h3>
+
+        <label style="font-size:14px;">Username</label>
+        <input id="mqttUser" type="text" style="
+            width:100%; padding:10px;
+            margin:6px 0 14px 0;
+            border-radius:8px;
+            border:1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.08);
+            color:white;
+            font-size:15px;
+        ">
+
+        <label style="font-size:14px;">Password</label>
+        <input id="mqttPass" type="password" style="
+            width:100%; padding:10px;
+            margin:6px 0 18px 0;
+            border-radius:8px;
+            border:1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.08);
+            color:white;
+            font-size:15px;
+        ">
+
+        <button onclick="login()" style="
+            width:100%; padding:12px;
+            background:#0a84ff;
+            color:white;
+            border:none;
+            border-radius:8px;
+            font-size:16px;
+            font-weight:600;
+            cursor:pointer;
+            transition:0.2s;
+        "
+        onmouseover="this.style.background='#409cff'"
+        onmouseout="this.style.background='#0a84ff'">
+            Accedi
+        </button>
+    </div>
+</div>
+
+<script>
+    let MQTT_USERNAME = "";
+    let MQTT_PASSWORD = "";
+
+    function login() {
+        const user = document.getElementById("mqttUser").value.trim();
+        const pass = document.getElementById("mqttPass").value.trim();
+
+        if (!user || !pass) {
+            alert("Inserisci username e password.");
+            return;
+        }
+
+        MQTT_USERNAME = user;
+        MQTT_PASSWORD = pass;
+
+        document.getElementById("loginModal").style.display = "none";
+
+        // Carica la dashboard solo dopo il login
+        const script = document.createElement("script");
+        script.src = "dashboard.js";
+        document.body.appendChild(script);
+    }
+</script>
+
+<!-- 🔴 STATUS -->
 <div id="ws_status" class="ws_status ws_disconnected">🔴 Disconnesso</div>
 
 <h2>Dashboard</h2>
@@ -133,15 +224,6 @@
 </div>
 
 <canvas id="chart_history_custom"></canvas>
-
-<!-- 🔐 Popup credenziali -->
-<script>
-    const MQTT_USERNAME = prompt("Inserisci username HiveMQ:");
-    const MQTT_PASSWORD = prompt("Inserisci password HiveMQ:");
-</script>
-
-<!-- 🔧 Logica dashboard -->
-<script src="dashboard.js"></script>
 
 </body>
 </html>
