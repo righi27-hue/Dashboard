@@ -236,12 +236,29 @@ function aiqColor(v) {
 let ignoreToggleEvents = false;
 let expectedChunkId = 0; // usato per ignorare duplicati/out-of-order
 
-window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
-    username: MQTT_USERNAME,
-    password: MQTT_PASSWORD,
-    clean: true,
-    reconnectPeriod: 2000
-});
+function startMQTT() {
+    window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
+        username: MQTT_USERNAME,
+        password: MQTT_PASSWORD,
+        clean: true,
+        reconnectPeriod: 2000
+    });
+
+    mqttClient.on("connect", () => {
+        updateWSStatus(true);
+        mqttClient.subscribe("esp32/live");
+        mqttClient.subscribe("esp32/history_chunk");
+        mqttClient.subscribe("esp32/relay_state");
+    });
+
+    mqttClient.on("close", () => updateWSStatus(false));
+    mqttClient.on("error", () => updateWSStatus(false));
+
+    mqttClient.on("message", (topic, message) => {
+        // tutto il tuo handler rimane identico
+        ...
+    });
+}
 
 mqttClient.on("connect", () => {
     updateWSStatus(true);
@@ -486,6 +503,7 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
 
 
