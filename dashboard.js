@@ -265,6 +265,9 @@ function startMQTT() {
         // ===== LIVE DATA =====
         if (topic === "esp32/live") {
 
+            console.log("TS GREZZO:", d.timestamps[0]);
+            console.log("JS CONVERSIONE:", new Date(d.timestamps[0] * 1000));
+            console.log("OFFSET MINUTI:", new Date().getTimezoneOffset());
             document.getElementById("co2").innerText  = d.co2;
             document.getElementById("tvoc").innerText = d.tvoc;
             document.getElementById("pm25").innerText = d.pm25;
@@ -493,6 +496,7 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
 
 
