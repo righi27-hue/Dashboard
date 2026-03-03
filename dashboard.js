@@ -321,6 +321,7 @@ function startMQTT() {
         if (topic === "esp32/history_chunk") {
 
             handleHistoryPacket(d);
+            console.log("TS GREZZO:", d.timestamps[0]);
 
             if (!d.done) {
                 const ack = { chunkId: d.chunkId || 0 };
@@ -478,6 +479,7 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
 
 
