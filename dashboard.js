@@ -246,6 +246,7 @@ function startMQTT() {
     });
 
     mqttClient.on("connect", () => {
+        console.log("MQTT RAW:", topic, message.toString());
         updateWSStatus(true);
         mqttClient.subscribe("esp32/live");
         mqttClient.subscribe("esp32/history_chunk");
@@ -479,6 +480,7 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
 
 
