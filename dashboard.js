@@ -379,11 +379,17 @@ function updateYAxisRangeHistory() {
 }
 
 // ===================== STORICO CUSTOM REQUEST =====================
+
+// Conversione corretta: interpreta la data come ORA LOCALE (CST) senza UTC
 function toEpochSecondsLocal(dtLocalStr) {
-    return Math.floor(new Date(dtLocalStr).getTime() / 1000);
+    const [date, time] = dtLocalStr.split("T");
+    const [y, m, d] = date.split("-");
+    const [hh, mm] = time.split(":");
+    return Math.floor(new Date(y, m - 1, d, hh, mm).getTime() / 1000);
 }
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
+
     let from = document.getElementById("hist_from").value;
     let to   = document.getElementById("hist_to").value;
     let sensors = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
@@ -393,6 +399,7 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
         return;
     }
 
+    // Reset strutture dati
     historyCustom = {
         labels: [],
         temp: [],
@@ -407,6 +414,7 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
     chart_history_custom.data.datasets.forEach(ds => ds.data = []);
     chart_history_custom.update();
 
+    // Costruzione richiesta con timestamp corretti (ORA LOCALE)
     let req = {
         type: "get_history",
         from: toEpochSecondsLocal(from),
@@ -473,6 +481,7 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
 
 
