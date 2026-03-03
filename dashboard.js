@@ -322,17 +322,25 @@ function startMQTT() {
         }
 
         // ===== STORICO CHUNK =====
-        if (topic === "esp32/history_chunk") {
+      if (topic === "esp32/history_chunk") {
 
-            handleHistoryPacket(d);
+    if (d.timestamps && d.timestamps.length > 0) {
+        console.log("TS GREZZO:", d.timestamps[0]);
+        console.log("JS CONVERSIONE:", new Date(d.timestamps[0] * 1000));
+        console.log("OFFSET MINUTI:", new Date().getTimezoneOffset());
+    } else {
+        console.log("PACCHETTO SENZA TIMESTAMPS (probabilmente d.done = true)");
+    }
 
-            if (!d.done) {
-                const ack = { chunkId: d.chunkId || 0 };
-                mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
-            }
+    handleHistoryPacket(d);
 
-            return;
-        }
+    if (!d.done) {
+        const ack = { chunkId: d.chunkId || 0 };
+        mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
+    }
+
+    return;
+}
 
         // ===== RELAY STATE =====
         if (topic === "esp32/relay_state") {
@@ -496,6 +504,7 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
 
 
