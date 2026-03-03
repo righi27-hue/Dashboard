@@ -426,11 +426,18 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 });
 
 // ===================== STORICO PACKET HANDLER =====================
+function fromUTC(ts) {
+    // Converte un timestamp UTC in ora locale (CST nel tuo caso)
+    return new Date((ts - (new Date().getTimezoneOffset() * 60)) * 1000);
+}
+
 function handleHistoryPacket(d) {
 
+    // ===== PACKET NON COMPLETO =====
     if (!d.done) {
 
-        const newLabels = d.timestamps.map(t => new Date(t * 1000));
+        // Convertiamo i timestamp UTC in locale
+        const newLabels = d.timestamps.map(t => fromUTC(t));
         historyCustom.labels.push(...newLabels);
 
         const keys = ["temp","hum","press","co2","tvoc","pm25"];
@@ -442,6 +449,7 @@ function handleHistoryPacket(d) {
             if (d.data && d.data[key]) {
                 historyCustom[key].push(...d.data[key]);
             } else {
+                // Se un sensore non ha dati, riempiamo con null
                 for (let i = 0; i < newLabels.length; i++) {
                     historyCustom[key].push(null);
                 }
@@ -451,14 +459,17 @@ function handleHistoryPacket(d) {
         return;
     }
 
+    // ===== PACKET COMPLETO =====
     const keys = ["temp","hum","press","co2","tvoc","pm25"];
 
+    // Allinea eventuali lunghezze diverse
     keys.forEach(key => {
         while (historyCustom[key].length < historyCustom.labels.length) {
             historyCustom[key].push(null);
         }
     });
 
+    // Aggiorna grafico
     chart_history_custom.data.labels = historyCustom.labels;
 
     chart_history_custom.data.datasets.forEach(ds => {
@@ -467,6 +478,7 @@ function handleHistoryPacket(d) {
 
     updateYAxisRangeHistory();
 
+    // Imposta range X corretto
     if (historyCustom.labels.length > 0) {
         const minX = historyCustom.labels[0];
         const maxX = historyCustom.labels[historyCustom.labels.length - 1];
