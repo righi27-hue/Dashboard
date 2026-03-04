@@ -1,7 +1,3 @@
-// ===================== GLOBALI PER RANGE LOCALE =====================
-window._hist_from_local = null;
-window._hist_to_local = null;
-
 // ===================== GAUGE CREATOR =====================
 function createGauge(ctx, color) {
     return new Chart(ctx, {
@@ -30,7 +26,7 @@ g_tvoc = createGauge(document.getElementById("g_tvoc"), "#ffa726");
 g_pm25 = createGauge(document.getElementById("g_pm25"), "#ab47bc");
 g_aiq  = createGauge(document.getElementById("g_aiq"),  "#00e676");
 g_temp = createGauge(document.getElementById("g_temp"), "#29b6f6");
-g_hum  = createGauge(document.getElementById("g_hum"),  "#fdd835");
+g_hum  = createGauge(document.getElementById("g_hum"), "#fdd835");
 g_press= createGauge(document.getElementById("g_press"),"#66bb6a");
 
 // ===================== LIVE HISTORY DATA =====================
@@ -170,17 +166,7 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
                         hour: "HH:mm"
                     }
                 },
-                ticks: {
-                    color: "#aaa",
-                    callback: (value) => {
-                        const d = new Date(value);
-                        return d.toLocaleTimeString('it-IT', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false
-                        });
-                    }
-                }
+                ticks: { color: "#aaa" }
             },
             y: { ticks: { color: "#aaa" } }
         },
@@ -190,15 +176,7 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
                     title: (items) => {
                         let d = items[0].raw;
                         return d instanceof Date
-                            ? d.toLocaleString('it-IT', {
-                                year: 'numeric',
-                                month: '2-digit',
-                                day: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                                hour12: false
-                            })
+                            ? d.toLocaleString('it-IT')
                             : items[0].label;
                     },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
@@ -409,7 +387,7 @@ function updateYAxisRangeHistory() {
 // ===================== STORICO CUSTOM REQUEST =====================
 function toEpochSecondsLocal(dtLocalStr) {
     let ts = Math.floor(new Date(dtLocalStr).getTime() / 1000);
-    let offset = new Date().getTimezoneOffset() * 60;
+    let offset = new Date().getTimezoneOffset() * 60; // in secondi
     return ts - offset;
 }
 
@@ -443,9 +421,6 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
         to:   toEpochSecondsLocal(to),
         sensors: sensors
     };
-
-    window._hist_from_local = new Date(from);
-    window._hist_to_local   = new Date(to);
 
     mqttClient.publish("esp32/history/request", JSON.stringify(req));
 });
@@ -492,9 +467,5 @@ function handleHistoryPacket(d) {
 
     updateYAxisRangeHistory();
 
-    chart_history_custom.options.scales.x.min = window._hist_from_local;
-    chart_history_custom.options.scales.x.max = window._hist_to_local;
-
     chart_history_custom.update();
 }
-
