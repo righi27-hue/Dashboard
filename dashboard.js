@@ -380,7 +380,9 @@ function updateYAxisRangeHistory() {
 
 // ===================== STORICO CUSTOM REQUEST =====================
 function toEpochSecondsLocal(dtLocalStr) {
-    return Math.floor(new Date(dtLocalStr).getTime() / 1000);
+    let ts = Math.floor(new Date(dtLocalStr).getTime() / 1000);
+    let offset = new Date().getTimezoneOffset() * 60; // in secondi
+    return ts - offset;
 }
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
@@ -473,3 +475,4 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
