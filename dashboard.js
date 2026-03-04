@@ -188,6 +188,7 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         }
     }
 });
+
 // ===================== CHECKBOX STORICO =====================
 document.querySelectorAll(".histCheck").forEach(chk => {
     chk.addEventListener("change", () => {
@@ -470,9 +471,19 @@ function handleHistoryPacket(d) {
     updateYAxisRangeHistory();
 
     if (historyCustom.labels.length > 0) {
-        const minX = historyCustom
+        const minX = historyCustom.labels[0];
+        const maxX = historyCustom.labels[historyCustom.labels.length - 1];
 
+        if (chart_history_custom.resetZoom) {
+            chart_history_custom.resetZoom();
+        }
 
+        chart_history_custom.options.scales.x.min = minX;
+        chart_history_custom.options.scales.x.max = maxX;
+    }
+
+    chart_history_custom.update();
+}
 
 
 
