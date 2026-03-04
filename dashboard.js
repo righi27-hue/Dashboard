@@ -1,3 +1,7 @@
+// ===================== GLOBALI PER RANGE LOCALE =====================
+window._hist_from_local = null;
+window._hist_to_local = null;
+
 // ===================== GAUGE CREATOR =====================
 function createGauge(ctx, color) {
     return new Chart(ctx, {
@@ -21,7 +25,6 @@ function createGauge(ctx, color) {
 // ===================== CREAZIONE GAUGE =====================
 let g_co2, g_tvoc, g_pm25, g_aiq, g_temp, g_hum, g_press;
 
-// DOM già pronto (dashboard.js caricato normalmente)
 g_co2  = createGauge(document.getElementById("g_co2"),  "#ff5252");
 g_tvoc = createGauge(document.getElementById("g_tvoc"), "#ffa726");
 g_pm25 = createGauge(document.getElementById("g_pm25"), "#ab47bc");
@@ -141,7 +144,6 @@ let historyCustom = {
     tvoc: [],
     pm25: []
 };
-
 // ===================== STORICO CUSTOM CHART =====================
 let chart_history_custom = new Chart(document.getElementById("chart_history_custom"), {
     type: 'line',
@@ -152,8 +154,8 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
             { label:"hum",   borderColor:sensorColors.hum,   data:historyCustom.hum,   tension:0.3, hidden:false },
             { label:"press", borderColor:sensorColors.press, data:historyCustom.press, tension:0.3, hidden:true },
             { label:"co2",   borderColor:sensorColors.co2,   data:historyCustom.co2,   tension:0.3, hidden:true },
-            { label:"tvoc",  borderColor:sensorColors.tvoc,  data:historyCustom.tvoc,  tension:0.3, hidden:true },
-            { label:"pm25",  borderColor:sensorColors.pm25,  data:historyCustom.pm25,  tension:0.3, hidden:true }
+            { label:"tvoc",  borderColor:sensorColors.tvoc,  data:historyCustom.tvoc,  tension:0.3, hidden:false },
+            { label:"pm25",  borderColor:sensorColors.pm25,  data:historyCustom.pm25,  tension:0.3, hidden:false }
         ]
     },
     options: {
@@ -161,8 +163,24 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         scales: {
             x: {
                 type: "time",
-                time: { unit: "minute" },
-                ticks: { color: "#aaa" }
+                time: {
+                    unit: "minute",
+                    displayFormats: {
+                        minute: "HH:mm",
+                        hour: "HH:mm"
+                    }
+                },
+                ticks: {
+                    color: "#aaa",
+                    callback: (value) => {
+                        const d = new Date(value);
+                        return d.toLocaleTimeString('it-IT', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false
+                        });
+                    }
+                }
             },
             y: { ticks: { color: "#aaa" } }
         },
@@ -171,7 +189,17 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
                 callbacks: {
                     title: (items) => {
                         let d = items[0].raw;
-                        return d instanceof Date ? d.toLocaleString() : items[0].label;
+                        return d instanceof Date
+                            ? d.toLocaleString('it-IT', {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            })
+                            : items[0].label;
                     },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
@@ -208,7 +236,6 @@ document.getElementById("smooth_mode").addEventListener("change", (e) => {
     });
     chart_history_custom.update();
 });
-
 // ===================== WEBSOCKET STATUS =====================
 function updateWSStatus(connected) {
     let el = document.getElementById("ws_status");
@@ -224,6 +251,7 @@ function updateWSStatus(connected) {
         el.classList.add("ws_disconnected");
     }
 }
+
 // ===================== AIQ COLOR SCALE =====================
 function aiqColor(v) {
     if (v <= 50)  return "#00e676";
@@ -235,7 +263,6 @@ function aiqColor(v) {
 
 // ===================== MQTT CLOUD CONNECTION =====================
 let ignoreToggleEvents = false;
-let expectedChunkId = 0;
 
 function startMQTT() {
 
@@ -295,10 +322,11 @@ function startMQTT() {
             g_press.update();
 
             let now = new Date();
-            let timeStr = now.toLocaleTimeString([], {
+            let timeStr = now.toLocaleTimeString('it-IT', {
                 hour: '2-digit',
                 minute: '2-digit',
-                second: '2-digit'
+                second: '2-digit',
+                hour12: false
             });
 
             historyData.labels.push(timeStr);
@@ -381,7 +409,7 @@ function updateYAxisRangeHistory() {
 // ===================== STORICO CUSTOM REQUEST =====================
 function toEpochSecondsLocal(dtLocalStr) {
     let ts = Math.floor(new Date(dtLocalStr).getTime() / 1000);
-    let offset = new Date().getTimezoneOffset() * 60; // in secondi
+    let offset = new Date().getTimezoneOffset() * 60;
     return ts - offset;
 }
 
@@ -415,6 +443,9 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
         to:   toEpochSecondsLocal(to),
         sensors: sensors
     };
+
+    window._hist_from_local = new Date(from);
+    window._hist_to_local   = new Date(to);
 
     mqttClient.publish("esp32/history/request", JSON.stringify(req));
 });
@@ -461,17 +492,8 @@ function handleHistoryPacket(d) {
 
     updateYAxisRangeHistory();
 
-    if (historyCustom.labels.length > 0) {
-        const minX = historyCustom.labels[0];
-        const maxX = historyCustom.labels[historyCustom.labels.length - 1];
-
-        if (chart_history_custom.resetZoom) {
-            chart_history_custom.resetZoom();
-        }
-
-        chart_history_custom.options.scales.x.min = minX;
-        chart_history_custom.options.scales.x.max = maxX;
-    }
+    chart_history_custom.options.scales.x.min = window._hist_from_local;
+    chart_history_custom.options.scales.x.max = window._hist_to_local;
 
     chart_history_custom.update();
 }
