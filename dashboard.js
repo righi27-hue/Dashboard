@@ -188,7 +188,6 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         }
     }
 });
-
 // ===================== CHECKBOX STORICO =====================
 document.querySelectorAll(".histCheck").forEach(chk => {
     chk.addEventListener("change", () => {
@@ -246,7 +245,6 @@ function startMQTT() {
     });
 
     mqttClient.on("connect", () => {
-        console.log("MQTT RAW:", topic, message.toString());
         updateWSStatus(true);
         mqttClient.subscribe("esp32/live");
         mqttClient.subscribe("esp32/history_chunk");
@@ -322,7 +320,6 @@ function startMQTT() {
         if (topic === "esp32/history_chunk") {
 
             handleHistoryPacket(d);
-            console.log("TS GREZZO:", d.timestamps[0]);
 
             if (!d.done) {
                 const ack = { chunkId: d.chunkId || 0 };
@@ -423,12 +420,18 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 });
 
 // ===================== STORICO PACKET HANDLER =====================
+
+// Conversione corretta: UTC → ora locale
+function fromUTC(ts) {
+    return new Date((ts - (new Date().getTimezoneOffset() * 60)) * 1000);
+}
+
 function handleHistoryPacket(d) {
 
     // Pacchetti intermedi
     if (!d.done) {
 
-        const newLabels = d.timestamps.map(t => new Date(t * 1000));
+        const newLabels = d.timestamps.map(t => fromUTC(t));
         historyCustom.labels.push(...newLabels);
 
         const keys = ["temp","hum","press","co2","tvoc","pm25"];
@@ -467,20 +470,7 @@ function handleHistoryPacket(d) {
     updateYAxisRangeHistory();
 
     if (historyCustom.labels.length > 0) {
-        const minX = historyCustom.labels[0];
-        const maxX = historyCustom.labels[historyCustom.labels.length - 1];
-
-        if (chart_history_custom.resetZoom) {
-            chart_history_custom.resetZoom();
-        }
-
-        chart_history_custom.options.scales.x.min = minX;
-        chart_history_custom.options.scales.x.max = maxX;
-    }
-
-    chart_history_custom.update();
-}
-
+        const minX = historyCustom
 
 
 
