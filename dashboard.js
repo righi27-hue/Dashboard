@@ -21,6 +21,7 @@ function createGauge(ctx, color) {
 // ===================== CREAZIONE GAUGE =====================
 let g_co2, g_tvoc, g_pm25, g_aiq, g_temp, g_hum, g_press;
 
+// DOM già pronto (dashboard.js caricato normalmente)
 g_co2  = createGauge(document.getElementById("g_co2"),  "#ff5252");
 g_tvoc = createGauge(document.getElementById("g_tvoc"), "#ffa726");
 g_pm25 = createGauge(document.getElementById("g_pm25"), "#ab47bc");
@@ -223,7 +224,6 @@ function updateWSStatus(connected) {
         el.classList.add("ws_disconnected");
     }
 }
-
 // ===================== AIQ COLOR SCALE =====================
 function aiqColor(v) {
     if (v <= 50)  return "#00e676";
@@ -235,6 +235,7 @@ function aiqColor(v) {
 
 // ===================== MQTT CLOUD CONNECTION =====================
 let ignoreToggleEvents = false;
+let expectedChunkId = 0;
 
 function startMQTT() {
 
@@ -319,6 +320,7 @@ function startMQTT() {
 
         // ===== STORICO CHUNK =====
         if (topic === "esp32/history_chunk") {
+
             handleHistoryPacket(d);
 
             if (!d.done) {
@@ -378,14 +380,10 @@ function updateYAxisRangeHistory() {
 
 // ===================== STORICO CUSTOM REQUEST =====================
 function toEpochSecondsLocal(dtLocalStr) {
-    const [date, time] = dtLocalStr.split("T");
-    const [y, m, d] = date.split("-");
-    const [hh, mm] = time.split(":");
-    return Math.floor(new Date(y, m - 1, d, hh, mm).getTime() / 1000);
+    return Math.floor(new Date(dtLocalStr).getTime() / 1000);
 }
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
-
     let from = document.getElementById("hist_from").value;
     let to   = document.getElementById("hist_to").value;
     let sensors = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
@@ -420,25 +418,11 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 });
 
 // ===================== STORICO PACKET HANDLER =====================
-
-// Conversione corretta: UTC → ora locale
-function fromUTC(ts) {
-    return new Date((ts - (new Date().getTimezoneOffset() * 60)) * 1000);
-}
-
 function handleHistoryPacket(d) {
-console.log(
-    "CHUNK:",
-    d.chunkId,
-    "FROM:", d.timestamps?.[0],
-    "TO:", d.timestamps?.[d.timestamps.length - 1],
-    "DONE:", d.done
-);
-    // ===== PACCHETTI INTERMEDI =====
+
     if (!d.done) {
 
-        // Converti timestamp UTC → locale
-        const newLabels = d.timestamps.map(t => fromUTC(t));
+        const newLabels = d.timestamps.map(t => new Date(t * 1000));
         historyCustom.labels.push(...newLabels);
 
         const keys = ["temp","hum","press","co2","tvoc","pm25"];
@@ -450,7 +434,6 @@ console.log(
             if (d.data && d.data[key]) {
                 historyCustom[key].push(...d.data[key]);
             } else {
-                // Se un sensore non ha dati, riempi con null
                 for (let i = 0; i < newLabels.length; i++) {
                     historyCustom[key].push(null);
                 }
@@ -460,17 +443,14 @@ console.log(
         return;
     }
 
-    // ===== PACCHETTO FINALE =====
     const keys = ["temp","hum","press","co2","tvoc","pm25"];
 
-    // Allinea eventuali lunghezze diverse
     keys.forEach(key => {
         while (historyCustom[key].length < historyCustom.labels.length) {
             historyCustom[key].push(null);
         }
     });
 
-    // Aggiorna grafico
     chart_history_custom.data.labels = historyCustom.labels;
 
     chart_history_custom.data.datasets.forEach(ds => {
@@ -479,7 +459,6 @@ console.log(
 
     updateYAxisRangeHistory();
 
-    // Imposta range X corretto
     if (historyCustom.labels.length > 0) {
         const minX = historyCustom.labels[0];
         const maxX = historyCustom.labels[historyCustom.labels.length - 1];
@@ -493,11 +472,4 @@ console.log(
     }
 
     chart_history_custom.update();
-} // <-- chiude handleHistoryPacket
-
-
-// ===================== AVVIO MQTT =====================
-startMQTT();
-
-
-
+}
