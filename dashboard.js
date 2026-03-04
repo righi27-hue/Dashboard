@@ -319,7 +319,6 @@ function startMQTT() {
 
         // ===== STORICO CHUNK =====
         if (topic === "esp32/history_chunk") {
-
             handleHistoryPacket(d);
 
             if (!d.done) {
@@ -429,9 +428,10 @@ function fromUTC(ts) {
 
 function handleHistoryPacket(d) {
 
-    // Pacchetti intermedi
+    // ===== PACCHETTI INTERMEDI =====
     if (!d.done) {
 
+        // Converti timestamp UTC → locale
         const newLabels = d.timestamps.map(t => fromUTC(t));
         historyCustom.labels.push(...newLabels);
 
@@ -444,6 +444,7 @@ function handleHistoryPacket(d) {
             if (d.data && d.data[key]) {
                 historyCustom[key].push(...d.data[key]);
             } else {
+                // Se un sensore non ha dati, riempi con null
                 for (let i = 0; i < newLabels.length; i++) {
                     historyCustom[key].push(null);
                 }
@@ -453,15 +454,17 @@ function handleHistoryPacket(d) {
         return;
     }
 
-    // Pacchetto finale
+    // ===== PACCHETTO FINALE =====
     const keys = ["temp","hum","press","co2","tvoc","pm25"];
 
+    // Allinea eventuali lunghezze diverse
     keys.forEach(key => {
         while (historyCustom[key].length < historyCustom.labels.length) {
             historyCustom[key].push(null);
         }
     });
 
+    // Aggiorna grafico
     chart_history_custom.data.labels = historyCustom.labels;
 
     chart_history_custom.data.datasets.forEach(ds => {
@@ -470,6 +473,7 @@ function handleHistoryPacket(d) {
 
     updateYAxisRangeHistory();
 
+    // Imposta range X corretto
     if (historyCustom.labels.length > 0) {
         const minX = historyCustom.labels[0];
         const maxX = historyCustom.labels[historyCustom.labels.length - 1];
@@ -483,11 +487,8 @@ function handleHistoryPacket(d) {
     }
 
     chart_history_custom.update();
-}
+} // <-- chiude handleHistoryPacket
 
 
-
-
-
-
-
+// ===================== AVVIO MQTT =====================
+startMQTT();
