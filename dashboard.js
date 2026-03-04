@@ -427,7 +427,13 @@ function fromUTC(ts) {
 }
 
 function handleHistoryPacket(d) {
-
+console.log(
+    "CHUNK:",
+    d.chunkId,
+    "FROM:", d.timestamps?.[0],
+    "TO:", d.timestamps?.[d.timestamps.length - 1],
+    "DONE:", d.done
+);
     // ===== PACCHETTI INTERMEDI =====
     if (!d.done) {
 
@@ -492,5 +498,6 @@ function handleHistoryPacket(d) {
 
 // ===================== AVVIO MQTT =====================
 startMQTT();
+
 
 
