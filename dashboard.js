@@ -21,7 +21,6 @@ function createGauge(ctx, color) {
 // ===================== CREAZIONE GAUGE =====================
 let g_co2, g_tvoc, g_pm25, g_aiq, g_temp, g_hum, g_press;
 
-// DOM già pronto (dashboard.js caricato normalmente)
 g_co2  = createGauge(document.getElementById("g_co2"),  "#ff5252");
 g_tvoc = createGauge(document.getElementById("g_tvoc"), "#ffa726");
 g_pm25 = createGauge(document.getElementById("g_pm25"), "#ab47bc");
@@ -161,8 +160,25 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         scales: {
             x: {
                 type: "time",
-                time: { unit: "minute" },
-                ticks: { color: "#aaa" }
+                time: {
+                    unit: "minute",
+                    displayFormats: {
+                        minute: "HH:mm",
+                        hour: "HH:mm"
+                    }
+                },
+                ticks: {
+                    color: "#aaa",
+                    callback: (value, index, ticks) => {
+                        const v = ticks[index].value;
+                        const d = v instanceof Date ? v : new Date(v);
+                        return d.toLocaleTimeString('it-IT', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false
+                        });
+                    }
+                }
             },
             y: { ticks: { color: "#aaa" } }
         },
@@ -171,7 +187,17 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
                 callbacks: {
                     title: (items) => {
                         let d = items[0].raw;
-                        return d instanceof Date ? d.toLocaleString() : items[0].label;
+                        return d instanceof Date
+                            ? d.toLocaleString('it-IT', {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            })
+                            : items[0].label;
                     },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
@@ -189,7 +215,6 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         }
     }
 });
-
 // ===================== CHECKBOX STORICO =====================
 document.querySelectorAll(".histCheck").forEach(chk => {
     chk.addEventListener("change", () => {
@@ -224,6 +249,7 @@ function updateWSStatus(connected) {
         el.classList.add("ws_disconnected");
     }
 }
+
 // ===================== AIQ COLOR SCALE =====================
 function aiqColor(v) {
     if (v <= 50)  return "#00e676";
@@ -295,10 +321,11 @@ function startMQTT() {
             g_press.update();
 
             let now = new Date();
-            let timeStr = now.toLocaleTimeString([], {
+            let timeStr = now.toLocaleTimeString('it-IT', {
                 hour: '2-digit',
                 minute: '2-digit',
-                second: '2-digit'
+                second: '2-digit',
+                hour12: false
             });
 
             historyData.labels.push(timeStr);
@@ -469,7 +496,4 @@ function handleHistoryPacket(d) {
 
         chart_history_custom.options.scales.x.min = minX;
         chart_history_custom.options.scales.x.max = maxX;
-    }
-
-    chart_history_custom.update();
-}
+   
