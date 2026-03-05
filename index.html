@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
 
-  <!-- Chart.js 3 + plugin zoom + adapter date-fns v3 (compatibili con il codice esistente) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@3"></script>
+  <!-- Chart.js 4 + plugin zoom + adapter date-fns v4 (compatibili con Chart.js 4.x) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@4"></script>
 
   <!-- MQTT client -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
@@ -19,61 +19,30 @@
 </head>
 <body>
 
-<!-- 🔐 LOGIN MODAL -->
+<!-- LOGIN MODAL -->
 <div id="loginModal" style="
-    position: fixed;
-    top: 0; left: 0;
+    position: fixed; top: 0; left: 0;
     width: 100%; height: 100%;
     background: rgba(0,0,0,0.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(8px);
-    z-index: 9999;">
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(8px); z-index: 9999;">
   <div style="
         background: rgba(20,20,20,0.85);
-        padding: 28px;
-        border-radius: 14px;
-        width: 300px;
+        padding: 28px; border-radius: 14px; width: 300px;
         box-shadow: 0 8px 30px rgba(0,0,0,0.4);
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        color: #f2f2f2;
-        border: 1px solid rgba(255,255,255,0.08);
+        color: #f2f2f2; border: 1px solid rgba(255,255,255,0.08);
         backdrop-filter: blur(12px);">
     <h3 style="margin-top:0; text-align:center; font-weight:600;">Accesso MQTT</h3>
 
     <label style="font-size:14px;">Username</label>
-    <input id="mqttUser" type="text" style="
-            width:100%; padding:10px;
-            margin:6px 0 14px 0;
-            border-radius:8px;
-            border:1px solid rgba(255,255,255,0.15);
-            background: rgba(255,255,255,0.08);
-            color:white;
-            font-size:15px;" />
+    <input id="mqttUser" type="text" style="width:100%; padding:10px; margin:6px 0 14px 0; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color:white; font-size:15px;" />
 
     <label style="font-size:14px;">Password</label>
-    <input id="mqttPass" type="password" style="
-            width:100%; padding:10px;
-            margin:6px 0 18px 0;
-            border-radius:8px;
-            border:1px solid rgba(255,255,255,0.15);
-            background: rgba(255,255,255,0.08);
-            color:white;
-            font-size:15px;" />
+    <input id="mqttPass" type="password" style="width:100%; padding:10px; margin:6px 0 18px 0; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color:white; font-size:15px;" />
 
-    <button onclick="login()" style="
-            width:100%; padding:12px;
-            background:#0a84ff;
-            color:white;
-            border:none;
-            border-radius:8px;
-            font-size:16px;
-            font-weight:600;
-            cursor:pointer;
-            transition:0.2s;"
-            onmouseover="this.style.background='#409cff'"
-            onmouseout="this.style.background='#0a84ff'">
+    <button onclick="login()" style="width:100%; padding:12px; background:#0a84ff; color:white; border:none; border-radius:8px; font-size:16px; font-weight:600; cursor:pointer; transition:0.2s;"
+            onmouseover="this.style.background='#409cff'" onmouseout="this.style.background='#0a84ff'">
       Accedi
     </button>
   </div>
@@ -86,99 +55,35 @@
   function login() {
     const user = document.getElementById("mqttUser").value.trim();
     const pass = document.getElementById("mqttPass").value.trim();
-
-    if (!user || !pass) {
-      alert("Inserisci username e password.");
-      return;
-    }
-
-    MQTT_USERNAME = user;
-    MQTT_PASSWORD = pass;
-
+    if (!user || !pass) { alert("Inserisci username e password."); return; }
+    MQTT_USERNAME = user; MQTT_PASSWORD = pass;
     document.getElementById("loginModal").style.display = "none";
-
-    // Avvia la connessione MQTT definita in dashboard.js
-    if (typeof startMQTT === "function") {
-      startMQTT();
-    } else {
-      console.error("startMQTT non è definita (controlla dashboard.js)");
-    }
+    if (typeof startMQTT === "function") startMQTT();
+    else console.error("startMQTT non è definita (controlla dashboard.js)");
   }
 </script>
 
-<!-- 🔴 STATUS -->
 <div id="ws_status" class="ws_status ws_disconnected">🔴 Disconnesso</div>
 
 <h2>Dashboard</h2>
 
 <div class="grid">
-  <div class="card">
-    <span class="material-symbols-outlined icon">co2</span>
-    <div class="gauge"><canvas id="g_co2"></canvas></div>
-    <div id="co2" class="value">--</div>
-  </div>
-
-  <div class="card">
-    <span class="material-symbols-outlined icon">Aq_Indoor</span>
-    <div class="gauge"><canvas id="g_tvoc"></canvas></div>
-    <div id="tvoc" class="value">--</div>
-  </div>
-
-  <div class="card">
-    <span class="material-symbols-outlined icon">blur_on</span>
-    <div class="gauge"><canvas id="g_pm25"></canvas></div>
-    <div id="pm25" class="value">--</div>
-  </div>
-
-  <div class="card">
-    <span class="material-symbols-outlined icon">air</span>
-    <div class="gauge"><canvas id="g_aiq"></canvas></div>
-    <div id="aiq" class="value">--</div>
-  </div>
-
-  <div class="card">
-    <span class="material-symbols-outlined icon">device_thermostat</span>
-    <div class="gauge"><canvas id="g_temp"></canvas></div>
-    <div id="temp" class="value">--</div>
-  </div>
-
-  <div class="card">
-    <span class="material-symbols-outlined icon">dew_point</span>
-    <div class="gauge"><canvas id="g_hum"></canvas></div>
-    <div id="hum" class="value">--</div>
-  </div>
-
-  <div class="card">
-    <span class="material-symbols-outlined icon">speed</span>
-    <div class="gauge"><canvas id="g_press"></canvas></div>
-    <div id="press" class="value">--</div>
-  </div>
+  <div class="card"><span class="material-symbols-outlined icon">co2</span><div class="gauge"><canvas id="g_co2"></canvas></div><div id="co2" class="value">--</div></div>
+  <div class="card"><span class="material-symbols-outlined icon">Aq_Indoor</span><div class="gauge"><canvas id="g_tvoc"></canvas></div><div id="tvoc" class="value">--</div></div>
+  <div class="card"><span class="material-symbols-outlined icon">blur_on</span><div class="gauge"><canvas id="g_pm25"></canvas></div><div id="pm25" class="value">--</div></div>
+  <div class="card"><span class="material-symbols-outlined icon">air</span><div class="gauge"><canvas id="g_aiq"></canvas></div><div id="aiq" class="value">--</div></div>
+  <div class="card"><span class="material-symbols-outlined icon">device_thermostat</span><div class="gauge"><canvas id="g_temp"></canvas></div><div id="temp" class="value">--</div></div>
+  <div class="card"><span class="material-symbols-outlined icon">dew_point</span><div class="gauge"><canvas id="g_hum"></canvas></div><div id="hum" class="value">--</div></div>
+  <div class="card"><span class="material-symbols-outlined icon">speed</span><div class="gauge"><canvas id="g_press"></canvas></div><div id="press" class="value">--</div></div>
 </div>
 
 <h2>Outputs</h2>
-
 <div class="relay-row-dual">
-  <div class="relay-item">
-    <span class="relay-label">Relay 1</span>
-    <span class="material-symbols-outlined relay-icon" id="relay1_icon">power_settings_new</span>
-    <label class="switch relay-switch">
-      <input type="checkbox" id="relay1_toggle" />
-      <span class="slider"></span>
-    </label>
-  </div>
-
-  <div class="relay-item">
-    <span class="relay-label">Relay 2</span>
-    <span class="material-symbols-outlined relay-icon" id="relay2_icon">power_settings_new</span>
-    <label class="switch relay-switch">
-      <input type="checkbox" id="relay2_toggle" />
-      <span class="slider"></span>
-    </label>
-  </div>
+  <div class="relay-item"><span class="relay-label">Relay 1</span><span class="material-symbols-outlined relay-icon" id="relay1_icon">power_settings_new</span><label class="switch relay-switch"><input type="checkbox" id="relay1_toggle"><span class="slider"></span></label></div>
+  <div class="relay-item"><span class="relay-label">Relay 2</span><span class="material-symbols-outlined relay-icon" id="relay2_icon">power_settings_new</span><label class="switch relay-switch"><input type="checkbox" id="relay2_toggle"><span class="slider"></span></label></div>
 </div>
 
 <h2>Live</h2>
-
 <div class="selector">
   <label><input type="checkbox" class="sensorCheck" value="temp" checked><span>Temp</span></label>
   <label><input type="checkbox" class="sensorCheck" value="hum" checked><span>Hum</span></label>
@@ -191,7 +96,6 @@
 <canvas id="chart_history"></canvas>
 
 <h2>Historic</h2>
-
 <div class="selector">
   <label><input type="checkbox" class="histCheck" value="temp" checked><span>Temp</span></label>
   <label><input type="checkbox" class="histCheck" value="hum" checked><span>Hum</span></label>
@@ -199,22 +103,18 @@
   <label><input type="checkbox" class="histCheck" value="co2"><span>CO₂</span></label>
   <label><input type="checkbox" class="histCheck" value="tvoc"><span>TVOC</span></label>
   <label><input type="checkbox" class="histCheck" value="pm25"><span>PM2.5</span></label>
-
-  <label style="margin-left:10px;">
-    <input type="checkbox" id="smooth_mode" />
-    Smooth
-  </label>
+  <label style="margin-left:10px;"><input type="checkbox" id="smooth_mode"> Smooth</label>
 </div>
 
 <div style="text-align:center; margin-bottom:10px;">
-  <input type="datetime-local" id="hist_from" />
-  <input type="datetime-local" id="hist_to" />
+  <input type="datetime-local" id="hist_from">
+  <input type="datetime-local" id="hist_to">
   <button id="btn_load_history">Carica storico</button>
 </div>
 
 <canvas id="chart_history_custom"></canvas>
 
-<!-- Caricamento logica dashboard (dashboard.js deve essere aggiornato come discusso) -->
+<!-- Logica dashboard -->
 <script src="dashboard.js"></script>
 
 </body>
