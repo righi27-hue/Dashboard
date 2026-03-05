@@ -1,36 +1,3 @@
-// ===================== CONFIG SHIFT =====================
-const SHIFT_HOURS = -6; // applica -6 ore come richiesto
-
-// ===================== FORMAT 24H =====================
-function formatTime24(date) {
-    let d = (date instanceof Date) ? date : new Date(date);
-    if (isNaN(d.getTime())) return "--:--:--";
-    let hh = String(d.getHours()).padStart(2, '0');
-    let mm = String(d.getMinutes()).padStart(2, '0');
-    let ss = String(d.getSeconds()).padStart(2, '0');
-    return `${hh}:${mm}:${ss}`;
-}
-
-function formatDateTime24(date) {
-    let d = (date instanceof Date) ? date : new Date(date);
-    if (isNaN(d.getTime())) return "--/--/---- --:--";
-    let day = String(d.getDate()).padStart(2, '0');
-    let month = String(d.getMonth() + 1).padStart(2, '0');
-    let year = d.getFullYear();
-    let hh = String(d.getHours()).padStart(2, '0');
-    let mm = String(d.getMinutes()).padStart(2, '0');
-    return `${day}/${month}/${year} ${hh}:${mm}`;
-}
-
-function toSafeDate(v) {
-    if (v instanceof Date) return v;
-    let d = new Date(v);
-    if (!isNaN(d.getTime())) return d;
-    // Chart.js sometimes passes numeric ticks; try to interpret as timestamp
-    if (typeof v === 'number') return new Date(v);
-    return null;
-}
-
 // ===================== GAUGE CREATOR =====================
 function createGauge(ctx, color) {
     return new Chart(ctx, {
@@ -54,6 +21,7 @@ function createGauge(ctx, color) {
 // ===================== CREAZIONE GAUGE =====================
 let g_co2, g_tvoc, g_pm25, g_aiq, g_temp, g_hum, g_press;
 
+// DOM già pronto (dashboard.js caricato normalmente)
 g_co2  = createGauge(document.getElementById("g_co2"),  "#ff5252");
 g_tvoc = createGauge(document.getElementById("g_tvoc"), "#ffa726");
 g_pm25 = createGauge(document.getElementById("g_pm25"), "#ab47bc");
@@ -66,7 +34,7 @@ g_press= createGauge(document.getElementById("g_press"),"#66bb6a");
 let MAX_POINTS = 300;
 
 let historyData = {
-    labels: [], // **Date objects**
+    labels: [],
     temp: [],
     hum: [],
     press: [],
@@ -110,26 +78,13 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
     options: {
         animation: { duration: 150 },
         scales: {
-            x: {
-                ticks: {
-                    color: "#aaa",
-                    callback: (value, index) => {
-                        // index may be undefined for some tick types; guard it
-                        let d = historyData.labels[index];
-                        return d ? formatTime24(d) : "--:--:--";
-                    }
-                }
-            },
+            x: { ticks: { color: "#aaa" } },
             y: { ticks: { color: "#aaa" } }
         },
         plugins: {
             tooltip: {
                 callbacks: {
-                    title: (items) => {
-                        let raw = items[0].raw || historyData.labels[items[0].dataIndex];
-                        let d = toSafeDate(raw);
-                        return d ? "Ora: " + formatTime24(d) : "Ora: --:--:--";
-                    },
+                    title: (items) => "Ora: " + items[0].label,
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
             },
@@ -146,6 +101,7 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
         }
     }
 });
+
 // ===================== LIVE Y RANGE =====================
 function updateYAxisRange() {
     let selected = [...document.querySelectorAll(".sensorCheck:checked")].map(c => c.value);
@@ -177,7 +133,7 @@ document.querySelectorAll(".sensorCheck").forEach(chk => {
 
 // ===================== STORICO CUSTOM DATA =====================
 let historyCustom = {
-    labels: [], // Date objects
+    labels: [],
     temp: [],
     hum: [],
     press: [],
@@ -205,21 +161,8 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         scales: {
             x: {
                 type: "time",
-                time: {
-                    unit: "minute",
-                    displayFormats: {
-                        minute: "HH:mm",
-                        hour: "HH:mm",
-                        second: "HH:mm:ss"
-                    }
-                },
-                ticks: {
-                    color: "#aaa",
-                    callback: (value, index) => {
-                        let d = historyCustom.labels[index];
-                        return d ? formatTime24(d) : "--:--:--";
-                    }
-                }
+                time: { unit: "minute" },
+                ticks: { color: "#aaa" }
             },
             y: { ticks: { color: "#aaa" } }
         },
@@ -227,9 +170,8 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
             tooltip: {
                 callbacks: {
                     title: (items) => {
-                        let raw = items[0].raw;
-                        let d = toSafeDate(raw);
-                        return d ? formatDateTime24(d) : formatDateTime24(items[0].label || new Date());
+                        let d = items[0].raw;
+                        return d instanceof Date ? d.toLocaleString() : items[0].label;
                     },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
@@ -247,6 +189,7 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         }
     }
 });
+
 // ===================== CHECKBOX STORICO =====================
 document.querySelectorAll(".histCheck").forEach(chk => {
     chk.addEventListener("change", () => {
@@ -258,16 +201,13 @@ document.querySelectorAll(".histCheck").forEach(chk => {
 });
 
 // ===================== SMOOTH MODE =====================
-let smoothEl = document.getElementById("smooth_mode");
-if (smoothEl) {
-    smoothEl.addEventListener("change", (e) => {
-        let smooth = e.target.checked;
-        chart_history_custom.data.datasets.forEach(ds => {
-            ds.spanGaps = smooth;
-        });
-        chart_history_custom.update();
+document.getElementById("smooth_mode").addEventListener("change", (e) => {
+    let smooth = e.target.checked;
+    chart_history_custom.data.datasets.forEach(ds => {
+        ds.spanGaps = smooth;
     });
-}
+    chart_history_custom.update();
+});
 
 // ===================== WEBSOCKET STATUS =====================
 function updateWSStatus(connected) {
@@ -284,7 +224,6 @@ function updateWSStatus(connected) {
         el.classList.add("ws_disconnected");
     }
 }
-
 // ===================== AIQ COLOR SCALE =====================
 function aiqColor(v) {
     if (v <= 50)  return "#00e676";
@@ -293,6 +232,7 @@ function aiqColor(v) {
     if (v <= 200) return "#ff7043";
     return "#d32f2f";
 }
+
 // ===================== MQTT CLOUD CONNECTION =====================
 let ignoreToggleEvents = false;
 let expectedChunkId = 0;
@@ -354,12 +294,14 @@ function startMQTT() {
             g_hum.update();
             g_press.update();
 
-            // labels devono essere Date (applichiamo lo stesso SHIFT_HOURS se vuoi mantenere il comportamento precedente)
             let now = new Date();
-            // applica shift: aggiungi SHIFT_HOURS ore (SHIFT_HOURS può essere negativo)
-            let shiftedNow = new Date(now.getTime() + SHIFT_HOURS * 3600 * 1000);
-            historyData.labels.push(shiftedNow);
+            let timeStr = now.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
 
+            historyData.labels.push(timeStr);
             historyData.temp.push(d.temp);
             historyData.hum.push(d.hum);
             historyData.press.push(d.press);
@@ -409,10 +351,15 @@ function sendRelayCommand(id, state) {
 }
 
 // ===================== RELAY LISTENERS =====================
-let r1 = document.getElementById("relay1_toggle");
-let r2 = document.getElementById("relay2_toggle");
-if (r1) r1.addEventListener("change", (e) => { if (ignoreToggleEvents) return; sendRelayCommand(1, e.target.checked); });
-if (r2) r2.addEventListener("change", (e) => { if (ignoreToggleEvents) return; sendRelayCommand(2, e.target.checked); });
+document.getElementById("relay1_toggle").addEventListener("change", (e) => {
+    if (ignoreToggleEvents) return;
+    sendRelayCommand(1, e.target.checked);
+});
+
+document.getElementById("relay2_toggle").addEventListener("change", (e) => {
+    if (ignoreToggleEvents) return;
+    sendRelayCommand(2, e.target.checked);
+});
 
 // ===================== RANGE Y STORICO =====================
 function updateYAxisRangeHistory() {
@@ -433,13 +380,12 @@ function updateYAxisRangeHistory() {
 
 // ===================== STORICO CUSTOM REQUEST =====================
 function toEpochSecondsLocal(dtLocalStr) {
-    // converte la stringa locale in epoch seconds e applica SHIFT_HOURS
     let ts = Math.floor(new Date(dtLocalStr).getTime() / 1000);
-    return ts + (SHIFT_HOURS * 3600);
+    let offset = new Date().getTimezoneOffset() * 60; // in secondi
+    return ts - offset;
 }
 
-let btnLoad = document.getElementById("btn_load_history");
-if (btnLoad) btnLoad.addEventListener("click", () => {
+document.getElementById("btn_load_history").addEventListener("click", () => {
     let from = document.getElementById("hist_from").value;
     let to   = document.getElementById("hist_to").value;
     let sensors = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
@@ -478,8 +424,7 @@ function handleHistoryPacket(d) {
 
     if (!d.done) {
 
-        // d.timestamps è array di epoch seconds (server). Applichiamo lo stesso SHIFT_HOURS per coerenza.
-        const newLabels = d.timestamps.map(t => new Date((t + (SHIFT_HOURS * 3600)) * 1000));
+        const newLabels = d.timestamps.map(t => new Date(t * 1000));
         historyCustom.labels.push(...newLabels);
 
         const keys = ["temp","hum","press","co2","tvoc","pm25"];
