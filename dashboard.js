@@ -1,4 +1,4 @@
-// ===================== GAUGE CREATOR =====================
+// ===================== GAUGE CREATOR + GLOBALS =====================
 function createGauge(ctx, color) {
     return new Chart(ctx, {
         type: 'doughnut',
@@ -18,10 +18,8 @@ function createGauge(ctx, color) {
     });
 }
 
-// ===================== CREAZIONE GAUGE =====================
 let g_co2, g_tvoc, g_pm25, g_aiq, g_temp, g_hum, g_press;
 
-// DOM già pronto (dashboard.js caricato normalmente)
 g_co2  = createGauge(document.getElementById("g_co2"),  "#ff5252");
 g_tvoc = createGauge(document.getElementById("g_tvoc"), "#ffa726");
 g_pm25 = createGauge(document.getElementById("g_pm25"), "#ab47bc");
@@ -30,7 +28,6 @@ g_temp = createGauge(document.getElementById("g_temp"), "#29b6f6");
 g_hum  = createGauge(document.getElementById("g_hum"),  "#fdd835");
 g_press= createGauge(document.getElementById("g_press"),"#66bb6a");
 
-// ===================== LIVE HISTORY DATA =====================
 let MAX_POINTS = 300;
 
 let historyData = {
@@ -61,30 +58,44 @@ const sensorRanges = {
     pm25:  { min: 0,   max: 150 }
 };
 
-// ===================== LIVE CHART =====================
+function aiqColor(v) {
+    if (v <= 50)  return "#00e676";
+    if (v <= 100) return "#cddc39";
+    if (v <= 150) return "#ffb300";
+    if (v <= 200) return "#ff7043";
+    return "#d32f2f";
+}
+// ===================== LIVE CHART (asse temporale) =====================
 let chart_history = new Chart(document.getElementById("chart_history"), {
     type: 'line',
     data: {
-        labels: historyData.labels,
         datasets: [
-            { label:"temp",  borderColor:sensorColors.temp,  data:historyData.temp,  tension:0.3, hidden:false },
-            { label:"hum",   borderColor:sensorColors.hum,   data:historyData.hum,   tension:0.3, hidden:false },
-            { label:"press", borderColor:sensorColors.press, data:historyData.press, tension:0.3, hidden:true },
-            { label:"co2",   borderColor:sensorColors.co2,   data:historyData.co2,   tension:0.3, hidden:true },
-            { label:"tvoc",  borderColor:sensorColors.tvoc,  data:historyData.tvoc,  tension:0.3, hidden:true },
-            { label:"pm25",  borderColor:sensorColors.pm25,  data:historyData.pm25,  tension:0.3, hidden:true }
+            { label:"temp",  borderColor:sensorColors.temp,  data:[],  tension:0.3, hidden:false },
+            { label:"hum",   borderColor:sensorColors.hum,   data:[],  tension:0.3, hidden:false },
+            { label:"press", borderColor:sensorColors.press, data:[],  tension:0.3, hidden:true },
+            { label:"co2",   borderColor:sensorColors.co2,   data:[],  tension:0.3, hidden:true },
+            { label:"tvoc",  borderColor:sensorColors.tvoc,  data:[],  tension:0.3, hidden:true },
+            { label:"pm25",  borderColor:sensorColors.pm25,  data:[],  tension:0.3, hidden:true }
         ]
     },
     options: {
         animation: { duration: 150 },
         scales: {
-            x: { ticks: { color: "#aaa" } },
+            x: {
+                type: "time",
+                time: { tooltipFormat: "HH:mm:ss", displayFormats: { second: "HH:mm:ss", minute: "HH:mm" } },
+                ticks: { color: "#aaa" }
+            },
             y: { ticks: { color: "#aaa" } }
         },
         plugins: {
             tooltip: {
                 callbacks: {
-                    title: (items) => "Ora: " + items[0].label,
+                    title: (items) => {
+                        const raw = items[0].parsed.x;
+                        const dt = raw instanceof Date ? raw : new Date(raw);
+                        return dt.toLocaleString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                    },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
             },
@@ -102,7 +113,7 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
     }
 });
 
-// ===================== LIVE Y RANGE =====================
+// ===================== CHECKBOX LIVE =====================
 function updateYAxisRange() {
     let selected = [...document.querySelectorAll(".sensorCheck:checked")].map(c => c.value);
     if (selected.length === 0) return;
@@ -120,40 +131,28 @@ function updateYAxisRange() {
     chart_history.update('none');
 }
 
-// ===================== CHECKBOX LIVE =====================
 document.querySelectorAll(".sensorCheck").forEach(chk => {
     chk.addEventListener("change", () => {
         chart_history.data.datasets.forEach(ds => {
-            ds.hidden = !document.querySelector(`input[value="${ds.label}"]`).checked;
+            const el = document.querySelector(`input.sensorCheck[value="${ds.label}"]`);
+            ds.hidden = !el || !el.checked;
         });
         updateYAxisRange();
         chart_history.update();
     });
 });
 
-// ===================== STORICO CUSTOM DATA =====================
-let historyCustom = {
-    labels: [],
-    temp: [],
-    hum: [],
-    press: [],
-    co2: [],
-    tvoc: [],
-    pm25: []
-};
-
 // ===================== STORICO CUSTOM CHART =====================
 let chart_history_custom = new Chart(document.getElementById("chart_history_custom"), {
     type: 'line',
     data: {
-        labels: historyCustom.labels,
         datasets: [
-            { label:"temp",  borderColor:sensorColors.temp,  data:historyCustom.temp,  tension:0.3, hidden:false },
-            { label:"hum",   borderColor:sensorColors.hum,   data:historyCustom.hum,   tension:0.3, hidden:false },
-            { label:"press", borderColor:sensorColors.press, data:historyCustom.press, tension:0.3, hidden:true },
-            { label:"co2",   borderColor:sensorColors.co2,   data:historyCustom.co2,   tension:0.3, hidden:true },
-            { label:"tvoc",  borderColor:sensorColors.tvoc,  data:historyCustom.tvoc,  tension:0.3, hidden:true },
-            { label:"pm25",  borderColor:sensorColors.pm25,  data:historyCustom.pm25,  tension:0.3, hidden:true }
+            { label:"temp",  borderColor:sensorColors.temp,  data:[],  tension:0.3, hidden:false },
+            { label:"hum",   borderColor:sensorColors.hum,   data:[],  tension:0.3, hidden:false },
+            { label:"press", borderColor:sensorColors.press, data:[],  tension:0.3, hidden:true },
+            { label:"co2",   borderColor:sensorColors.co2,   data:[],  tension:0.3, hidden:true },
+            { label:"tvoc",  borderColor:sensorColors.tvoc,  data:[],  tension:0.3, hidden:true },
+            { label:"pm25",  borderColor:sensorColors.pm25,  data:[],  tension:0.3, hidden:true }
         ]
     },
     options: {
@@ -161,7 +160,7 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         scales: {
             x: {
                 type: "time",
-                time: { unit: "minute" },
+                time: { unit: "minute", tooltipFormat: "yyyy-MM-dd HH:mm:ss", displayFormats: { minute: "HH:mm" } },
                 ticks: { color: "#aaa" }
             },
             y: { ticks: { color: "#aaa" } }
@@ -170,8 +169,9 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
             tooltip: {
                 callbacks: {
                     title: (items) => {
-                        let d = items[0].raw;
-                        return d instanceof Date ? d.toLocaleString() : items[0].label;
+                        const raw = items[0].parsed.x;
+                        const dt = raw instanceof Date ? raw : new Date(raw);
+                        return dt.toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
                     },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
@@ -190,17 +190,16 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
     }
 });
 
-// ===================== CHECKBOX STORICO =====================
 document.querySelectorAll(".histCheck").forEach(chk => {
     chk.addEventListener("change", () => {
         chart_history_custom.data.datasets.forEach(ds => {
-            ds.hidden = !document.querySelector(`.histCheck[value="${ds.label}"]`).checked;
+            const el = document.querySelector(`.histCheck[value="${ds.label}"]`);
+            ds.hidden = !el || !el.checked;
         });
         chart_history_custom.update();
     });
 });
 
-// ===================== SMOOTH MODE =====================
 document.getElementById("smooth_mode").addEventListener("change", (e) => {
     let smooth = e.target.checked;
     chart_history_custom.data.datasets.forEach(ds => {
@@ -208,37 +207,10 @@ document.getElementById("smooth_mode").addEventListener("change", (e) => {
     });
     chart_history_custom.update();
 });
-
-// ===================== WEBSOCKET STATUS =====================
-function updateWSStatus(connected) {
-    let el = document.getElementById("ws_status");
-    if (!el) return;
-
-    if (connected) {
-        el.textContent = "🟢 Connesso";
-        el.classList.remove("ws_disconnected");
-        el.classList.add("ws_connected");
-    } else {
-        el.textContent = "🔴 Disconnesso — riconnessione…";
-        el.classList.remove("ws_connected");
-        el.classList.add("ws_disconnected");
-    }
-}
-// ===================== AIQ COLOR SCALE =====================
-function aiqColor(v) {
-    if (v <= 50)  return "#00e676";
-    if (v <= 100) return "#cddc39";
-    if (v <= 150) return "#ffb300";
-    if (v <= 200) return "#ff7043";
-    return "#d32f2f";
-}
-
-// ===================== MQTT CLOUD CONNECTION =====================
+// ===================== MQTT + LIVE HANDLING + RELAY =====================
 let ignoreToggleEvents = false;
-let expectedChunkId = 0;
 
 function startMQTT() {
-
     window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
         username: MQTT_USERNAME,
         password: MQTT_PASSWORD,
@@ -257,10 +229,8 @@ function startMQTT() {
     mqttClient.on("error", () => updateWSStatus(false));
 
     mqttClient.on("message", (topic, message) => {
-
         let d;
-        try { d = JSON.parse(message.toString()); }
-        catch { return; }
+        try { d = JSON.parse(message.toString()); } catch { return; }
 
         // ===== LIVE DATA =====
         if (topic === "esp32/live") {
@@ -294,14 +264,25 @@ function startMQTT() {
             g_hum.update();
             g_press.update();
 
+            // push live points as {x: Date, y: value}
             let now = new Date();
-            let timeStr = now.toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
 
-            historyData.labels.push(timeStr);
+            const pushPoint = (label, value) => {
+                const ds = chart_history.data.datasets.find(s => s.label === label);
+                if (!ds) return;
+                ds.data.push({ x: now, y: value });
+                if (ds.data.length > MAX_POINTS) ds.data.shift();
+            };
+
+            pushPoint("temp", d.temp);
+            pushPoint("hum", d.hum);
+            pushPoint("press", d.press);
+            pushPoint("co2", d.co2);
+            pushPoint("tvoc", d.tvoc);
+            pushPoint("pm25", d.pm25);
+
+            // keep historyData arrays (optional)
+            historyData.labels.push(now);
             historyData.temp.push(d.temp);
             historyData.hum.push(d.hum);
             historyData.press.push(d.press);
@@ -314,54 +295,84 @@ function startMQTT() {
             }
 
             updateYAxisRange();
-            chart_history.update();
+            chart_history.update('none');
             return;
         }
 
         // ===== STORICO CHUNK =====
         if (topic === "esp32/history_chunk") {
-
             handleHistoryPacket(d);
-
             if (!d.done) {
                 const ack = { chunkId: d.chunkId || 0 };
                 mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
             }
-
             return;
         }
 
         // ===== RELAY STATE =====
         if (topic === "esp32/relay_state") {
-
             ignoreToggleEvents = true;
-
-            document.getElementById("relay1_toggle").checked = d.r1;
-            document.getElementById("relay2_toggle").checked = d.r2;
-
+            document.getElementById("relay1_toggle").checked = !!d.r1;
+            document.getElementById("relay2_toggle").checked = !!d.r2;
             ignoreToggleEvents = false;
             return;
         }
     });
 }
 
-// ===================== RELAY COMMAND =====================
 function sendRelayCommand(id, state) {
+    if (!window.mqttClient) return;
     mqttClient.publish(`esp32/cmd/relay${id}`, state ? "1" : "0");
 }
 
-// ===================== RELAY LISTENERS =====================
 document.getElementById("relay1_toggle").addEventListener("change", (e) => {
     if (ignoreToggleEvents) return;
     sendRelayCommand(1, e.target.checked);
 });
-
 document.getElementById("relay2_toggle").addEventListener("change", (e) => {
     if (ignoreToggleEvents) return;
     sendRelayCommand(2, e.target.checked);
 });
 
-// ===================== RANGE Y STORICO =====================
+// ===================== STORICO REQUEST / HELPERS =====================
+// IMPORTANT: do NOT subtract timezone offset here; Date("YYYY-MM-DDTHH:MM") is local.
+function toEpochSecondsLocal(dtLocalStr) {
+    return Math.floor(new Date(dtLocalStr).getTime() / 1000);
+}
+
+document.getElementById("btn_load_history").addEventListener("click", () => {
+    let from = document.getElementById("hist_from").value;
+    let to   = document.getElementById("hist_to").value;
+    let sensors = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
+
+    if (!from || !to || sensors.length === 0) {
+        alert("Seleziona almeno un sensore e un intervallo valido");
+        return;
+    }
+
+    // reset temporaneo
+    historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
+    chart_history_custom.data.datasets.forEach(ds => ds.data = []);
+    chart_history_custom.data.labels = [];
+    chart_history_custom.update();
+
+    let req = {
+        type: "get_history",
+        from: toEpochSecondsLocal(from),
+        to:   toEpochSecondsLocal(to),
+        sensors: sensors
+    };
+
+    if (window.mqttClient) {
+        mqttClient.publish("esp32/history/request", JSON.stringify(req));
+    } else {
+        alert("MQTT non connesso");
+    }
+});
+
+// ===================== STORICO PACKET HANDLER =====================
+let historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
+
 function updateYAxisRangeHistory() {
     let selected = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
     if (selected.length === 0) return;
@@ -378,85 +389,37 @@ function updateYAxisRangeHistory() {
     chart_history_custom.options.scales.y.max = max;
 }
 
-// ===================== STORICO CUSTOM REQUEST =====================
-function toEpochSecondsLocal(dtLocalStr) {
-    let ts = Math.floor(new Date(dtLocalStr).getTime() / 1000);
-    let offset = new Date().getTimezoneOffset() * 60; // in secondi
-    return ts - offset;
-}
-
-document.getElementById("btn_load_history").addEventListener("click", () => {
-    let from = document.getElementById("hist_from").value;
-    let to   = document.getElementById("hist_to").value;
-    let sensors = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
-
-    if (!from || !to || sensors.length === 0) {
-        alert("Seleziona almeno un sensore e un intervallo valido");
-        return;
-    }
-
-    historyCustom = {
-        labels: [],
-        temp: [],
-        hum: [],
-        press: [],
-        co2: [],
-        tvoc: [],
-        pm25: []
-    };
-
-    chart_history_custom.data.labels = [];
-    chart_history_custom.data.datasets.forEach(ds => ds.data = []);
-    chart_history_custom.update();
-
-    let req = {
-        type: "get_history",
-        from: toEpochSecondsLocal(from),
-        to:   toEpochSecondsLocal(to),
-        sensors: sensors
-    };
-
-    mqttClient.publish("esp32/history/request", JSON.stringify(req));
-});
-
-// ===================== STORICO PACKET HANDLER =====================
 function handleHistoryPacket(d) {
-
+    // d.timestamps = [epoch_seconds,...], d.data = { temp: [...], ... }, d.done boolean
     if (!d.done) {
-
         const newLabels = d.timestamps.map(t => new Date(t * 1000));
         historyCustom.labels.push(...newLabels);
 
         const keys = ["temp","hum","press","co2","tvoc","pm25"];
-
         keys.forEach(key => {
-
             if (!historyCustom[key]) historyCustom[key] = [];
-
             if (d.data && d.data[key]) {
                 historyCustom[key].push(...d.data[key]);
             } else {
-                for (let i = 0; i < newLabels.length; i++) {
-                    historyCustom[key].push(null);
-                }
+                for (let i = 0; i < newLabels.length; i++) historyCustom[key].push(null);
             }
         });
-
         return;
     }
 
+    // finalize: ensure lengths match
     const keys = ["temp","hum","press","co2","tvoc","pm25"];
-
     keys.forEach(key => {
-        while (historyCustom[key].length < historyCustom.labels.length) {
-            historyCustom[key].push(null);
-        }
+        while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
     });
 
-    chart_history_custom.data.labels = historyCustom.labels;
-
+    // populate datasets as {x:Date, y:value}
     chart_history_custom.data.datasets.forEach(ds => {
-        ds.data = historyCustom[ds.label];
+        const key = ds.label;
+        ds.data = historyCustom.labels.map((t, i) => {
+            const v = historyCustom[key][i];
+            return v === null ? { x: t, y: null } : { x: t, y: v };
+        });
     });
 
     updateYAxisRangeHistory();
@@ -465,13 +428,11 @@ function handleHistoryPacket(d) {
         const minX = historyCustom.labels[0];
         const maxX = historyCustom.labels[historyCustom.labels.length - 1];
 
-        if (chart_history_custom.resetZoom) {
-            chart_history_custom.resetZoom();
-        }
-
+        if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
         chart_history_custom.options.scales.x.min = minX;
         chart_history_custom.options.scales.x.max = maxX;
     }
 
     chart_history_custom.update();
 }
+
