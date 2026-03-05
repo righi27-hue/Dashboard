@@ -99,7 +99,7 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
             x: {
                 ticks: {
                     color: "#aaa",
-                    callback: (value, index) => historyData.labels[index]
+                    callback: (value, index) => formatTime24(historyData.labels[index])
                 }
             },
             y: { ticks: { color: "#aaa" } }
@@ -297,57 +297,58 @@ function startMQTT() {
         try { d = JSON.parse(message.toString()); }
         catch { return; }
 
-        // ===== LIVE DATA =====
-        if (topic === "esp32/live") {
+    // ===== LIVE DATA =====
+if (topic === "esp32/live") {
 
-            document.getElementById("co2").innerText  = d.co2;
-            document.getElementById("tvoc").innerText = d.tvoc;
-            document.getElementById("pm25").innerText = d.pm25;
-            document.getElementById("aiq").innerText  = d.aiq;
-            document.getElementById("temp").innerText = d.temp;
-            document.getElementById("hum").innerText  = d.hum;
-            document.getElementById("press").innerText= d.press;
+    document.getElementById("co2").innerText  = d.co2;
+    document.getElementById("tvoc").innerText = d.tvoc;
+    document.getElementById("pm25").innerText = d.pm25;
+    document.getElementById("aiq").innerText  = d.aiq;
+    document.getElementById("temp").innerText = d.temp;
+    document.getElementById("hum").innerText  = d.hum;
+    document.getElementById("press").innerText= d.press;
 
-            g_co2.data.datasets[0].data  = [d.co2/20, 100-(d.co2/20)];
-            g_tvoc.data.datasets[0].data = [d.tvoc/10, 100-(d.tvoc/10)];
-            g_pm25.data.datasets[0].data = [d.pm25, 100-d.pm25];
+    g_co2.data.datasets[0].data  = [d.co2/20, 100-(d.co2/20)];
+    g_tvoc.data.datasets[0].data = [d.tvoc/10, 100-(d.tvoc/10)];
+    g_pm25.data.datasets[0].data = [d.pm25, 100-d.pm25];
 
-            let aiqVal = Math.min(d.aiq, 500) / 5;
-            let aiqCol = aiqColor(d.aiq);
-            g_aiq.data.datasets[0].backgroundColor[0] = aiqCol;
-            g_aiq.data.datasets[0].data = [aiqVal, 100 - aiqVal];
+    let aiqVal = Math.min(d.aiq, 500) / 5;
+    let aiqCol = aiqColor(d.aiq);
+    g_aiq.data.datasets[0].backgroundColor[0] = aiqCol;
+    g_aiq.data.datasets[0].data = [aiqVal, 100 - aiqVal];
 
-            g_temp.data.datasets[0].data = [d.temp, 100-d.temp];
-            g_hum.data.datasets[0].data  = [d.hum, 100-d.hum];
-            g_press.data.datasets[0].data= [(d.press-980)/0.4, 100-((d.press-980)/0.4)];
+    g_temp.data.datasets[0].data = [d.temp, 100-d.temp];
+    g_hum.data.datasets[0].data  = [d.hum, 100-d.hum];
+    g_press.data.datasets[0].data= [(d.press-980)/0.4, 100-((d.press-980)/0.4)];
 
-            g_co2.update();
-            g_tvoc.update();
-            g_pm25.update();
-            g_aiq.update();
-            g_temp.update();
-            g_hum.update();
-            g_press.update();
+    g_co2.update();
+    g_tvoc.update();
+    g_pm25.update();
+    g_aiq.update();
+    g_temp.update();
+    g_hum.update();
+    g_press.update();
 
-            let now = new Date();
-            let timeStr = formatTime24(now);
+    // QUI LA FIX: labels devono essere Date, non stringhe
+    let now = new Date();
+    historyData.labels.push(now);
 
-            historyData.labels.push(timeStr);
-            historyData.temp.push(d.temp);
-            historyData.hum.push(d.hum);
-            historyData.press.push(d.press);
-            historyData.co2.push(d.co2);
-            historyData.tvoc.push(d.tvoc);
-            historyData.pm25.push(d.pm25);
+    historyData.temp.push(d.temp);
+    historyData.hum.push(d.hum);
+    historyData.press.push(d.press);
+    historyData.co2.push(d.co2);
+    historyData.tvoc.push(d.tvoc);
+    historyData.pm25.push(d.pm25);
 
-            if (historyData.labels.length > MAX_POINTS) {
-                Object.keys(historyData).forEach(k => historyData[k].shift());
-            }
+    if (historyData.labels.length > MAX_POINTS) {
+        Object.keys(historyData).forEach(k => historyData[k].shift());
+    }
 
-            updateYAxisRange();
-            chart_history.update();
-            return;
-        }
+    updateYAxisRange();
+    chart_history.update();
+    return;
+}
+        
 
         // ===== STORICO CHUNK =====
         if (topic === "esp32/history_chunk") {
@@ -504,4 +505,5 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
