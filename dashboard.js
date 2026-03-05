@@ -1,3 +1,16 @@
+// ===================== dashboard.js (completo, corretto per 24h e asse temporale) =====================
+
+// Forza locale 24h per Chart.js e formatter riutilizzabili
+Chart.defaults.locale = 'it-IT';
+const fmtTime24 = new Intl.DateTimeFormat('it-IT', {
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
+  hour12: false
+});
+const fmtTimeOnly24 = new Intl.DateTimeFormat('it-IT', {
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+});
+
 // ===================== GAUGE CREATOR + GLOBALS =====================
 function createGauge(ctx, color) {
     return new Chart(ctx, {
@@ -65,6 +78,7 @@ function aiqColor(v) {
     if (v <= 200) return "#ff7043";
     return "#d32f2f";
 }
+
 // ===================== LIVE CHART (asse temporale) =====================
 let chart_history = new Chart(document.getElementById("chart_history"), {
     type: 'line',
@@ -83,8 +97,22 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
         scales: {
             x: {
                 type: "time",
-                time: { tooltipFormat: "HH:mm:ss", displayFormats: { second: "HH:mm:ss", minute: "HH:mm" } },
-                ticks: { color: "#aaa" }
+                time: {
+                    tooltipFormat: "yyyy-MM-dd HH:mm:ss",
+                    displayFormats: { second: "HH:mm:ss", minute: "HH:mm", hour: "HH:mm" }
+                },
+                ticks: {
+                    color: "#aaa",
+                    callback: function(value) {
+                        // value può essere timestamp o stringa; converti in Date e formatta 24h
+                        try {
+                            const t = typeof value === 'number' ? new Date(value) : new Date(this.getLabelForValue(value));
+                            return fmtTimeOnly24.format(t);
+                        } catch (e) {
+                            return value;
+                        }
+                    }
+                }
             },
             y: { ticks: { color: "#aaa" } }
         },
@@ -94,7 +122,7 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
                     title: (items) => {
                         const raw = items[0].parsed.x;
                         const dt = raw instanceof Date ? raw : new Date(raw);
-                        return dt.toLocaleString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                        return fmtTime24.format(dt);
                     },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
@@ -160,8 +188,22 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         scales: {
             x: {
                 type: "time",
-                time: { unit: "minute", tooltipFormat: "yyyy-MM-dd HH:mm:ss", displayFormats: { minute: "HH:mm" } },
-                ticks: { color: "#aaa" }
+                time: {
+                    unit: "minute",
+                    tooltipFormat: "yyyy-MM-dd HH:mm:ss",
+                    displayFormats: { minute: "HH:mm", hour: "HH:mm" }
+                },
+                ticks: {
+                    color: "#aaa",
+                    callback: function(value) {
+                        try {
+                            const t = typeof value === 'number' ? new Date(value) : new Date(this.getLabelForValue(value));
+                            return fmtTimeOnly24.format(t);
+                        } catch (e) {
+                            return value;
+                        }
+                    }
+                }
             },
             y: { ticks: { color: "#aaa" } }
         },
@@ -171,7 +213,7 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
                     title: (items) => {
                         const raw = items[0].parsed.x;
                         const dt = raw instanceof Date ? raw : new Date(raw);
-                        return dt.toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                        return fmtTime24.format(dt);
                     },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
@@ -207,6 +249,23 @@ document.getElementById("smooth_mode").addEventListener("change", (e) => {
     });
     chart_history_custom.update();
 });
+
+// ===================== WEBSOCKET STATUS =====================
+function updateWSStatus(connected) {
+    let el = document.getElementById("ws_status");
+    if (!el) return;
+
+    if (connected) {
+        el.textContent = "🟢 Connesso";
+        el.classList.remove("ws_disconnected");
+        el.classList.add("ws_connected");
+    } else {
+        el.textContent = "🔴 Disconnesso — riconnessione…";
+        el.classList.remove("ws_connected");
+        el.classList.add("ws_disconnected");
+    }
+}
+
 // ===================== MQTT + LIVE HANDLING + RELAY =====================
 let ignoreToggleEvents = false;
 
@@ -335,7 +394,7 @@ document.getElementById("relay2_toggle").addEventListener("change", (e) => {
 });
 
 // ===================== STORICO REQUEST / HELPERS =====================
-// IMPORTANT: do NOT subtract timezone offset here; Date("YYYY-MM-DDTHH:MM") is local.
+// Non sottrarre offset: Date("YYYY-MM-DDTHH:MM") è locale
 function toEpochSecondsLocal(dtLocalStr) {
     return Math.floor(new Date(dtLocalStr).getTime() / 1000);
 }
@@ -392,7 +451,7 @@ function updateYAxisRangeHistory() {
 function handleHistoryPacket(d) {
     // d.timestamps = [epoch_seconds,...], d.data = { temp: [...], ... }, d.done boolean
     if (!d.done) {
-        const newLabels = d.timestamps.map(t => new Date(t * 1000));
+        const newLabels = (d.timestamps || []).map(t => new Date(t * 1000));
         historyCustom.labels.push(...newLabels);
 
         const keys = ["temp","hum","press","co2","tvoc","pm25"];
