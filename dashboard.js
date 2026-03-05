@@ -79,19 +79,79 @@ function aiqColor(v) {
     return "#d32f2f";
 }
 
-// ===================== CHARTS CONFIG =====================
+// ===================== ZOOM / PAN COMMON OPTIONS =====================
+// Sensibilità molto dolce, limiti dinamici gestiti separatamente
 const commonZoomOptions = {
-    zoom: {
-        wheel: { enabled: true, speed: 0.08 },
-        pinch: { enabled: true, speed: 0.08 },
-        drag: { enabled: false },
-        mode: 'x',
-        limits: { x: { minRange: 1000 * 10 } }
-    },
-    pan: { enabled: true, mode: 'x', threshold: 5 }
+  zoom: {
+    wheel: { enabled: true, speed: 0.02 },
+    pinch: { enabled: true, speed: 0.02 },
+    drag: { enabled: false },
+    mode: 'x',
+    limits: {
+      x: {
+        minRange: 1000 * 10,
+        maxRange: Number.MAX_SAFE_INTEGER
+      }
+    }
+  },
+  pan: {
+    enabled: true,
+    mode: 'x',
+    threshold: 6
+  }
 };
 
-// LIVE CHART
+// ===================== HELPERS PER ZOOM E BOUNDS =====================
+function getChartTimeBounds(chart) {
+  let min = Infinity, max = -Infinity;
+  chart.data.datasets.forEach(ds => {
+    ds.data.forEach(pt => {
+      const t = (pt && typeof pt === 'object') ? pt.x : pt;
+      if (!t) return;
+      const ts = (t instanceof Date) ? t.getTime() : new Date(t).getTime();
+      if (!isNaN(ts)) {
+        min = Math.min(min, ts);
+        max = Math.max(max, ts);
+      }
+    });
+  });
+  if (min === Infinity) return null;
+  return { min, max };
+}
+
+function updateZoomLimitsForChart(chart, maxZoomOutFactor = 6) {
+  const bounds = getChartTimeBounds(chart);
+  if (!bounds) {
+    chart.options.plugins.zoom.zoom.limits.x.maxRange = Number.MAX_SAFE_INTEGER;
+    chart.options.plugins.zoom.zoom.limits.x.minRange = 1000 * 10;
+    delete chart.options.scales.x.min;
+    delete chart.options.scales.x.max;
+    return;
+  }
+  const dataRange = bounds.max - bounds.min;
+  const maxRange = Math.max(dataRange * maxZoomOutFactor, 1000 * 60);
+  chart.options.plugins.zoom.zoom.limits.x.maxRange = maxRange;
+  // Mantieni i limiti dell'asse per evitare pan oltre i dati
+  chart.options.scales.x.min = new Date(bounds.min);
+  chart.options.scales.x.max = new Date(bounds.max);
+}
+
+function clampViewToDataIfNeeded(chart, maxZoomOutFactor = 6) {
+  const bounds = getChartTimeBounds(chart);
+  if (!bounds) return;
+  const visibleMin = chart.scales.x.min instanceof Date ? chart.scales.x.min.getTime() : new Date(chart.scales.x.min).getTime();
+  const visibleMax = chart.scales.x.max instanceof Date ? chart.scales.x.max.getTime() : new Date(chart.scales.x.max).getTime();
+  const visibleRange = visibleMax - visibleMin;
+  const dataRange = bounds.max - bounds.min;
+  const maxAllowed = Math.max(dataRange * maxZoomOutFactor, 1000 * 60);
+  if (visibleRange > maxAllowed) {
+    chart.options.scales.x.min = new Date(bounds.min);
+    chart.options.scales.x.max = new Date(bounds.max);
+    chart.update();
+  }
+}
+
+// ===================== LIVE CHART =====================
 let chart_history = new Chart(document.getElementById("chart_history"), {
     type: 'line',
     data: {
@@ -142,7 +202,7 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
     }
 });
 
-// STORICO CUSTOM CHART
+// ===================== STORICO CUSTOM CHART =====================
 let chart_history_custom = new Chart(document.getElementById("chart_history_custom"), {
     type: 'line',
     data: {
@@ -193,6 +253,10 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         }
     }
 });
+
+// inizializza limiti zoom basici
+updateZoomLimitsForChart(chart_history, 6);
+updateZoomLimitsForChart(chart_history_custom, 6);
 
 // ===================== CHECKBOX HANDLERS =====================
 document.querySelectorAll(".sensorCheck").forEach(chk => {
@@ -396,7 +460,12 @@ function startMQTT() {
                 Object.keys(historyData).forEach(k => historyData[k].shift());
             }
 
+            // aggiorna scala Y e limiti zoom basati sui dati
             updateYAxisRange();
+            updateZoomLimitsForChart(chart_history, 6);
+            // se la vista è già fuori controllo, la riportiamo (opzionale)
+            clampViewToDataIfNeeded(chart_history, 6);
+
             chart_history.update('none');
             return;
         }
@@ -406,6 +475,10 @@ function startMQTT() {
             if (!d.done) {
                 const ack = { chunkId: d.chunkId || 0 };
                 mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
+            } else {
+                // quando lo storico è completo, aggiorna limiti zoom e scala Y
+                updateZoomLimitsForChart(chart_history_custom, 6);
+                updateYAxisRangeHistory();
             }
             return;
         }
@@ -505,7 +578,7 @@ function handleHistoryPacket(d) {
     });
 
     updateYAxisRangeHistory();
-
+    updateZoomLimitsForChart(chart_history_custom, 6);
     if (historyCustom.labels.length > 0) {
         const minX = historyCustom.labels[0];
         const maxX = historyCustom.labels[historyCustom.labels.length - 1];
@@ -516,5 +589,4 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
-
 
