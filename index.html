@@ -6,10 +6,15 @@
 
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
 
-  <!-- Chart.js 4 + plugin zoom + adapter date-fns v4 (compatibili con Chart.js 4.x) -->
+  <!-- Chart.js 4 + plugin zoom -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@4"></script>
+
+  <!-- date-fns (dipendenza dell'adapter) -->
+  <script src="https://cdn.jsdelivr.net/npm/date-fns@2"></script>
+
+  <!-- chartjs-adapter-date-fns v4 (minified UMD build) -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@4/dist/chartjs-adapter-date-fns.min.js"></script>
 
   <!-- MQTT client -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
@@ -115,9 +120,7 @@
 <canvas id="chart_history_custom"></canvas>
 
 <!-- Logica dashboard -->
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@4/dist/chartjs-adapter-date-fns.min.js"></script>
 <script src="dashboard.js"></script>
 
 </body>
 </html>
-
