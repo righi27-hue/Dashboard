@@ -193,7 +193,10 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
                 },
                 ticks: {
                     color: "#aaa",
-                    callback: (value) => formatTime24(value)
+                    callback: (value, index) => {
+                    let d = historyCustom.labels[index];
+                    return formatTime24(d);
+}
                 }
             },
             y: { ticks: { color: "#aaa" } }
@@ -201,10 +204,10 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         plugins: {
             tooltip: {
                 callbacks: {
-                    title: (items) => {
-                        let d = items[0].raw;
-                        return d instanceof Date ? formatDateTime24(d) : formatTime24(items[0].label);
-                    },
+                   title: (items) => {
+                    let d = items[0].raw;
+                    return formatDateTime24(d);
+                },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
             },
@@ -408,9 +411,7 @@ function updateYAxisRangeHistory() {
 
 // ===================== STORICO CUSTOM REQUEST =====================
 function toEpochSecondsLocal(dtLocalStr) {
-    let ts = Math.floor(new Date(dtLocalStr).getTime() / 1000);
-    let offset = new Date().getTimezoneOffset() * 60;
-    return ts - offset;
+    return Math.floor(new Date(dtLocalStr).getTime() / 1000);
 }
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
@@ -503,3 +504,4 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
