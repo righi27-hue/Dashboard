@@ -1,6 +1,10 @@
+// ===================== CONFIG SHIFT =====================
+const SHIFT_HOURS = -6; // applica -6 ore come richiesto
+
 // ===================== FORMAT 24H =====================
 function formatTime24(date) {
     let d = (date instanceof Date) ? date : new Date(date);
+    if (isNaN(d.getTime())) return "--:--:--";
     let hh = String(d.getHours()).padStart(2, '0');
     let mm = String(d.getMinutes()).padStart(2, '0');
     let ss = String(d.getSeconds()).padStart(2, '0');
@@ -9,12 +13,22 @@ function formatTime24(date) {
 
 function formatDateTime24(date) {
     let d = (date instanceof Date) ? date : new Date(date);
+    if (isNaN(d.getTime())) return "--/--/---- --:--";
     let day = String(d.getDate()).padStart(2, '0');
     let month = String(d.getMonth() + 1).padStart(2, '0');
     let year = d.getFullYear();
     let hh = String(d.getHours()).padStart(2, '0');
     let mm = String(d.getMinutes()).padStart(2, '0');
     return `${day}/${month}/${year} ${hh}:${mm}`;
+}
+
+function toSafeDate(v) {
+    if (v instanceof Date) return v;
+    let d = new Date(v);
+    if (!isNaN(d.getTime())) return d;
+    // Chart.js sometimes passes numeric ticks; try to interpret as timestamp
+    if (typeof v === 'number') return new Date(v);
+    return null;
 }
 
 // ===================== GAUGE CREATOR =====================
@@ -52,7 +66,7 @@ g_press= createGauge(document.getElementById("g_press"),"#66bb6a");
 let MAX_POINTS = 300;
 
 let historyData = {
-    labels: [],
+    labels: [], // **Date objects**
     temp: [],
     hum: [],
     press: [],
@@ -99,7 +113,11 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
             x: {
                 ticks: {
                     color: "#aaa",
-                    callback: (value, index) => formatTime24(historyData.labels[index])
+                    callback: (value, index) => {
+                        // index may be undefined for some tick types; guard it
+                        let d = historyData.labels[index];
+                        return d ? formatTime24(d) : "--:--:--";
+                    }
                 }
             },
             y: { ticks: { color: "#aaa" } }
@@ -107,7 +125,11 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
         plugins: {
             tooltip: {
                 callbacks: {
-                    title: (items) => "Ora: " + formatTime24(items[0].label),
+                    title: (items) => {
+                        let raw = items[0].raw || historyData.labels[items[0].dataIndex];
+                        let d = toSafeDate(raw);
+                        return d ? "Ora: " + formatTime24(d) : "Ora: --:--:--";
+                    },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
             },
@@ -155,7 +177,7 @@ document.querySelectorAll(".sensorCheck").forEach(chk => {
 
 // ===================== STORICO CUSTOM DATA =====================
 let historyCustom = {
-    labels: [],
+    labels: [], // Date objects
     temp: [],
     hum: [],
     press: [],
@@ -194,9 +216,9 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
                 ticks: {
                     color: "#aaa",
                     callback: (value, index) => {
-                    let d = historyCustom.labels[index];
-                    return formatTime24(d);
-}
+                        let d = historyCustom.labels[index];
+                        return d ? formatTime24(d) : "--:--:--";
+                    }
                 }
             },
             y: { ticks: { color: "#aaa" } }
@@ -204,10 +226,11 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         plugins: {
             tooltip: {
                 callbacks: {
-                   title: (items) => {
-                    let d = items[0].raw;
-                    return formatDateTime24(d);
-                },
+                    title: (items) => {
+                        let raw = items[0].raw;
+                        let d = toSafeDate(raw);
+                        return d ? formatDateTime24(d) : formatDateTime24(items[0].label || new Date());
+                    },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
             },
@@ -224,7 +247,6 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         }
     }
 });
-
 // ===================== CHECKBOX STORICO =====================
 document.querySelectorAll(".histCheck").forEach(chk => {
     chk.addEventListener("change", () => {
@@ -236,13 +258,17 @@ document.querySelectorAll(".histCheck").forEach(chk => {
 });
 
 // ===================== SMOOTH MODE =====================
-document.getElementById("smooth_mode").addEventListener("change", (e) => {
-    let smooth = e.target.checked;
-    chart_history_custom.data.datasets.forEach(ds => {
-        ds.spanGaps = smooth;
+let smoothEl = document.getElementById("smooth_mode");
+if (smoothEl) {
+    smoothEl.addEventListener("change", (e) => {
+        let smooth = e.target.checked;
+        chart_history_custom.data.datasets.forEach(ds => {
+            ds.spanGaps = smooth;
+        });
+        chart_history_custom.update();
     });
-    chart_history_custom.update();
-});
+}
+
 // ===================== WEBSOCKET STATUS =====================
 function updateWSStatus(connected) {
     let el = document.getElementById("ws_status");
@@ -267,7 +293,6 @@ function aiqColor(v) {
     if (v <= 200) return "#ff7043";
     return "#d32f2f";
 }
-
 // ===================== MQTT CLOUD CONNECTION =====================
 let ignoreToggleEvents = false;
 let expectedChunkId = 0;
@@ -297,58 +322,59 @@ function startMQTT() {
         try { d = JSON.parse(message.toString()); }
         catch { return; }
 
-    // ===== LIVE DATA =====
-if (topic === "esp32/live") {
+        // ===== LIVE DATA =====
+        if (topic === "esp32/live") {
 
-    document.getElementById("co2").innerText  = d.co2;
-    document.getElementById("tvoc").innerText = d.tvoc;
-    document.getElementById("pm25").innerText = d.pm25;
-    document.getElementById("aiq").innerText  = d.aiq;
-    document.getElementById("temp").innerText = d.temp;
-    document.getElementById("hum").innerText  = d.hum;
-    document.getElementById("press").innerText= d.press;
+            document.getElementById("co2").innerText  = d.co2;
+            document.getElementById("tvoc").innerText = d.tvoc;
+            document.getElementById("pm25").innerText = d.pm25;
+            document.getElementById("aiq").innerText  = d.aiq;
+            document.getElementById("temp").innerText = d.temp;
+            document.getElementById("hum").innerText  = d.hum;
+            document.getElementById("press").innerText= d.press;
 
-    g_co2.data.datasets[0].data  = [d.co2/20, 100-(d.co2/20)];
-    g_tvoc.data.datasets[0].data = [d.tvoc/10, 100-(d.tvoc/10)];
-    g_pm25.data.datasets[0].data = [d.pm25, 100-d.pm25];
+            g_co2.data.datasets[0].data  = [d.co2/20, 100-(d.co2/20)];
+            g_tvoc.data.datasets[0].data = [d.tvoc/10, 100-(d.tvoc/10)];
+            g_pm25.data.datasets[0].data = [d.pm25, 100-d.pm25];
 
-    let aiqVal = Math.min(d.aiq, 500) / 5;
-    let aiqCol = aiqColor(d.aiq);
-    g_aiq.data.datasets[0].backgroundColor[0] = aiqCol;
-    g_aiq.data.datasets[0].data = [aiqVal, 100 - aiqVal];
+            let aiqVal = Math.min(d.aiq, 500) / 5;
+            let aiqCol = aiqColor(d.aiq);
+            g_aiq.data.datasets[0].backgroundColor[0] = aiqCol;
+            g_aiq.data.datasets[0].data = [aiqVal, 100 - aiqVal];
 
-    g_temp.data.datasets[0].data = [d.temp, 100-d.temp];
-    g_hum.data.datasets[0].data  = [d.hum, 100-d.hum];
-    g_press.data.datasets[0].data= [(d.press-980)/0.4, 100-((d.press-980)/0.4)];
+            g_temp.data.datasets[0].data = [d.temp, 100-d.temp];
+            g_hum.data.datasets[0].data  = [d.hum, 100-d.hum];
+            g_press.data.datasets[0].data= [(d.press-980)/0.4, 100-((d.press-980)/0.4)];
 
-    g_co2.update();
-    g_tvoc.update();
-    g_pm25.update();
-    g_aiq.update();
-    g_temp.update();
-    g_hum.update();
-    g_press.update();
+            g_co2.update();
+            g_tvoc.update();
+            g_pm25.update();
+            g_aiq.update();
+            g_temp.update();
+            g_hum.update();
+            g_press.update();
 
-    // QUI LA FIX: labels devono essere Date, non stringhe
-    let now = new Date();
-    historyData.labels.push(now);
+            // labels devono essere Date (applichiamo lo stesso SHIFT_HOURS se vuoi mantenere il comportamento precedente)
+            let now = new Date();
+            // applica shift: aggiungi SHIFT_HOURS ore (SHIFT_HOURS può essere negativo)
+            let shiftedNow = new Date(now.getTime() + SHIFT_HOURS * 3600 * 1000);
+            historyData.labels.push(shiftedNow);
 
-    historyData.temp.push(d.temp);
-    historyData.hum.push(d.hum);
-    historyData.press.push(d.press);
-    historyData.co2.push(d.co2);
-    historyData.tvoc.push(d.tvoc);
-    historyData.pm25.push(d.pm25);
+            historyData.temp.push(d.temp);
+            historyData.hum.push(d.hum);
+            historyData.press.push(d.press);
+            historyData.co2.push(d.co2);
+            historyData.tvoc.push(d.tvoc);
+            historyData.pm25.push(d.pm25);
 
-    if (historyData.labels.length > MAX_POINTS) {
-        Object.keys(historyData).forEach(k => historyData[k].shift());
-    }
+            if (historyData.labels.length > MAX_POINTS) {
+                Object.keys(historyData).forEach(k => historyData[k].shift());
+            }
 
-    updateYAxisRange();
-    chart_history.update();
-    return;
-}
-        
+            updateYAxisRange();
+            chart_history.update();
+            return;
+        }
 
         // ===== STORICO CHUNK =====
         if (topic === "esp32/history_chunk") {
@@ -383,15 +409,10 @@ function sendRelayCommand(id, state) {
 }
 
 // ===================== RELAY LISTENERS =====================
-document.getElementById("relay1_toggle").addEventListener("change", (e) => {
-    if (ignoreToggleEvents) return;
-    sendRelayCommand(1, e.target.checked);
-});
-
-document.getElementById("relay2_toggle").addEventListener("change", (e) => {
-    if (ignoreToggleEvents) return;
-    sendRelayCommand(2, e.target.checked);
-});
+let r1 = document.getElementById("relay1_toggle");
+let r2 = document.getElementById("relay2_toggle");
+if (r1) r1.addEventListener("change", (e) => { if (ignoreToggleEvents) return; sendRelayCommand(1, e.target.checked); });
+if (r2) r2.addEventListener("change", (e) => { if (ignoreToggleEvents) return; sendRelayCommand(2, e.target.checked); });
 
 // ===================== RANGE Y STORICO =====================
 function updateYAxisRangeHistory() {
@@ -412,10 +433,13 @@ function updateYAxisRangeHistory() {
 
 // ===================== STORICO CUSTOM REQUEST =====================
 function toEpochSecondsLocal(dtLocalStr) {
-    return Math.floor(new Date(dtLocalStr).getTime() / 1000);
+    // converte la stringa locale in epoch seconds e applica SHIFT_HOURS
+    let ts = Math.floor(new Date(dtLocalStr).getTime() / 1000);
+    return ts + (SHIFT_HOURS * 3600);
 }
 
-document.getElementById("btn_load_history").addEventListener("click", () => {
+let btnLoad = document.getElementById("btn_load_history");
+if (btnLoad) btnLoad.addEventListener("click", () => {
     let from = document.getElementById("hist_from").value;
     let to   = document.getElementById("hist_to").value;
     let sensors = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
@@ -454,7 +478,8 @@ function handleHistoryPacket(d) {
 
     if (!d.done) {
 
-        const newLabels = d.timestamps.map(t => new Date(t * 1000));
+        // d.timestamps è array di epoch seconds (server). Applichiamo lo stesso SHIFT_HOURS per coerenza.
+        const newLabels = d.timestamps.map(t => new Date((t + (SHIFT_HOURS * 3600)) * 1000));
         historyCustom.labels.push(...newLabels);
 
         const keys = ["temp","hum","press","co2","tvoc","pm25"];
@@ -478,7 +503,7 @@ function handleHistoryPacket(d) {
     const keys = ["temp","hum","press","co2","tvoc","pm25"];
 
     keys.forEach(key => {
-             while (historyCustom[key].length < historyCustom.labels.length) {
+        while (historyCustom[key].length < historyCustom.labels.length) {
             historyCustom[key].push(null);
         }
     });
@@ -505,5 +530,3 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
-
-
