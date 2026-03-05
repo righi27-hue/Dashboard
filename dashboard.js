@@ -1,3 +1,22 @@
+// ===================== FORMAT 24H =====================
+function formatTime24(date) {
+    let d = (date instanceof Date) ? date : new Date(date);
+    let hh = String(d.getHours()).padStart(2, '0');
+    let mm = String(d.getMinutes()).padStart(2, '0');
+    let ss = String(d.getSeconds()).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+}
+
+function formatDateTime24(date) {
+    let d = (date instanceof Date) ? date : new Date(date);
+    let day = String(d.getDate()).padStart(2, '0');
+    let month = String(d.getMonth() + 1).padStart(2, '0');
+    let year = d.getFullYear();
+    let hh = String(d.getHours()).padStart(2, '0');
+    let mm = String(d.getMinutes()).padStart(2, '0');
+    return `${day}/${month}/${year} ${hh}:${mm}`;
+}
+
 // ===================== GAUGE CREATOR =====================
 function createGauge(ctx, color) {
     return new Chart(ctx, {
@@ -21,7 +40,6 @@ function createGauge(ctx, color) {
 // ===================== CREAZIONE GAUGE =====================
 let g_co2, g_tvoc, g_pm25, g_aiq, g_temp, g_hum, g_press;
 
-// DOM già pronto (dashboard.js caricato normalmente)
 g_co2  = createGauge(document.getElementById("g_co2"),  "#ff5252");
 g_tvoc = createGauge(document.getElementById("g_tvoc"), "#ffa726");
 g_pm25 = createGauge(document.getElementById("g_pm25"), "#ab47bc");
@@ -78,13 +96,18 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
     options: {
         animation: { duration: 150 },
         scales: {
-            x: { ticks: { color: "#aaa" } },
+            x: {
+                ticks: {
+                    color: "#aaa",
+                    callback: (value, index) => historyData.labels[index]
+                }
+            },
             y: { ticks: { color: "#aaa" } }
         },
         plugins: {
             tooltip: {
                 callbacks: {
-                    title: (items) => "Ora: " + items[0].label,
+                    title: (items) => "Ora: " + formatTime24(items[0].label),
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
             },
@@ -101,7 +124,6 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
         }
     }
 });
-
 // ===================== LIVE Y RANGE =====================
 function updateYAxisRange() {
     let selected = [...document.querySelectorAll(".sensorCheck:checked")].map(c => c.value);
@@ -161,8 +183,18 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
         scales: {
             x: {
                 type: "time",
-                time: { unit: "minute" },
-                ticks: { color: "#aaa" }
+                time: {
+                    unit: "minute",
+                    displayFormats: {
+                        minute: "HH:mm",
+                        hour: "HH:mm",
+                        second: "HH:mm:ss"
+                    }
+                },
+                ticks: {
+                    color: "#aaa",
+                    callback: (value) => formatTime24(value)
+                }
             },
             y: { ticks: { color: "#aaa" } }
         },
@@ -171,7 +203,7 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
                 callbacks: {
                     title: (items) => {
                         let d = items[0].raw;
-                        return d instanceof Date ? d.toLocaleString() : items[0].label;
+                        return d instanceof Date ? formatDateTime24(d) : formatTime24(items[0].label);
                     },
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
@@ -208,7 +240,6 @@ document.getElementById("smooth_mode").addEventListener("change", (e) => {
     });
     chart_history_custom.update();
 });
-
 // ===================== WEBSOCKET STATUS =====================
 function updateWSStatus(connected) {
     let el = document.getElementById("ws_status");
@@ -224,6 +255,7 @@ function updateWSStatus(connected) {
         el.classList.add("ws_disconnected");
     }
 }
+
 // ===================== AIQ COLOR SCALE =====================
 function aiqColor(v) {
     if (v <= 50)  return "#00e676";
@@ -295,11 +327,7 @@ function startMQTT() {
             g_press.update();
 
             let now = new Date();
-            let timeStr = now.toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
+            let timeStr = formatTime24(now);
 
             historyData.labels.push(timeStr);
             historyData.temp.push(d.temp);
@@ -381,7 +409,7 @@ function updateYAxisRangeHistory() {
 // ===================== STORICO CUSTOM REQUEST =====================
 function toEpochSecondsLocal(dtLocalStr) {
     let ts = Math.floor(new Date(dtLocalStr).getTime() / 1000);
-    let offset = new Date().getTimezoneOffset() * 60; // in secondi
+    let offset = new Date().getTimezoneOffset() * 60;
     return ts - offset;
 }
 
@@ -448,7 +476,7 @@ function handleHistoryPacket(d) {
     const keys = ["temp","hum","press","co2","tvoc","pm25"];
 
     keys.forEach(key => {
-        while (historyCustom[key].length < historyCustom.labels.length) {
+             while (historyCustom[key].length < historyCustom.labels.length) {
             historyCustom[key].push(null);
         }
     });
