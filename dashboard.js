@@ -1,3 +1,5 @@
+// dashboard.js - versione aggiornata: 24h, zoom live controllato, storico ISO timestamps
+
 // Forza locale 24h per Chart.js e formatter riutilizzabili
 Chart.defaults.locale = 'it-IT';
 const fmtTime24 = new Intl.DateTimeFormat('it-IT', {
@@ -80,7 +82,7 @@ function aiqColor(v) {
 }
 
 // ===================== ZOOM / PAN COMMON OPTIONS =====================
-// Sensibilità molto dolce, limiti dinamici gestiti separatamente
+// Wheel speed molto dolce; limiti dinamici gestiti separatamente
 const commonZoomOptions = {
   zoom: {
     wheel: { enabled: true, speed: 0.02 },
@@ -119,23 +121,21 @@ function getChartTimeBounds(chart) {
   return { min, max };
 }
 
+// Applica solo limiti plugin (maxRange/minRange). Non impone scale.x.min/max qui.
 function updateZoomLimitsForChart(chart, maxZoomOutFactor = 6) {
   const bounds = getChartTimeBounds(chart);
   if (!bounds) {
     chart.options.plugins.zoom.zoom.limits.x.maxRange = Number.MAX_SAFE_INTEGER;
     chart.options.plugins.zoom.zoom.limits.x.minRange = 1000 * 10;
-    delete chart.options.scales.x.min;
-    delete chart.options.scales.x.max;
     return;
   }
   const dataRange = bounds.max - bounds.min;
   const maxRange = Math.max(dataRange * maxZoomOutFactor, 1000 * 60);
   chart.options.plugins.zoom.zoom.limits.x.maxRange = maxRange;
-  // Mantieni i limiti dell'asse per evitare pan oltre i dati
-  chart.options.scales.x.min = new Date(bounds.min);
-  chart.options.scales.x.max = new Date(bounds.max);
+  chart.options.plugins.zoom.zoom.limits.x.minRange = 1000 * 10;
 }
 
+// Riporta la vista ai limiti dati solo se l'utente ha esagerato lo zoom-out
 function clampViewToDataIfNeeded(chart, maxZoomOutFactor = 6) {
   const bounds = getChartTimeBounds(chart);
   if (!bounds) return;
@@ -463,7 +463,6 @@ function startMQTT() {
             // aggiorna scala Y e limiti zoom basati sui dati
             updateYAxisRange();
             updateZoomLimitsForChart(chart_history, 6);
-            // se la vista è già fuori controllo, la riportiamo (opzionale)
             clampViewToDataIfNeeded(chart_history, 6);
 
             chart_history.update('none');
@@ -508,9 +507,11 @@ document.getElementById("relay2_toggle").addEventListener("change", (e) => {
 });
 
 // ===================== STORICO REQUEST / HELPERS =====================
-// Date("YYYY-MM-DDTHH:MM") è locale: non sottrarre offset
-function toEpochSecondsLocal(dtLocalStr) {
-    return Math.floor(new Date(dtLocalStr).getTime() / 1000);
+// Invia ISO 8601 con timezone per evitare ambiguità di fuso orario
+function toISOStringLocal(dtLocalStr) {
+    // dtLocalStr è "YYYY-MM-DDTHH:MM" (datetime-local). new Date(...) interpreta come locale.
+    const d = new Date(dtLocalStr);
+    return d.toISOString(); // formato UTC con timezone Z
 }
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
@@ -531,8 +532,9 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 
     let req = {
         type: "get_history",
-        from: toEpochSecondsLocal(from),
-        to:   toEpochSecondsLocal(to),
+        // invia ISO string con timezone (UTC) per evitare shift
+        from: toISOStringLocal(from),
+        to:   toISOStringLocal(to),
         sensors: sensors
     };
 
@@ -545,9 +547,13 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 
 // ===================== STORICO PACKET HANDLER =====================
 function handleHistoryPacket(d) {
-    // d.timestamps = [epoch_seconds,...], d.data = { temp: [...], ... }, d.done boolean
+    // d.timestamps = [epoch_seconds,...] OR d.timestamps may be ISO strings depending on server.
+    // Support both: if numeric -> epoch seconds; if string -> Date parse.
     if (!d.done) {
-        const newLabels = (d.timestamps || []).map(t => new Date(t * 1000));
+        const newLabels = (d.timestamps || []).map(t => {
+            if (typeof t === 'number') return new Date(t * 1000);
+            return new Date(t);
+        });
         historyCustom.labels.push(...newLabels);
 
         const keys = ["temp","hum","press","co2","tvoc","pm25"];
@@ -579,14 +585,17 @@ function handleHistoryPacket(d) {
 
     updateYAxisRangeHistory();
     updateZoomLimitsForChart(chart_history_custom, 6);
+
     if (historyCustom.labels.length > 0) {
         const minX = historyCustom.labels[0];
         const maxX = historyCustom.labels[historyCustom.labels.length - 1];
         if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
+        // non forzare la vista se non necessario; impostiamo limiti plugin e poi clamp se serve
         chart_history_custom.options.scales.x.min = minX;
         chart_history_custom.options.scales.x.max = maxX;
     }
 
     chart_history_custom.update();
 }
+
 
