@@ -639,29 +639,21 @@ function handleHistoryPacket(d) {
   console.log('HISTORY CHUNK payload:', d);
   if (!d || typeof d !== 'object') return;
 
-  // decide se dobbiamo applicare la correzione "naive -> UTC reale"
-  // preferiamo l'offset inviato nel chunk, altrimenti usiamo l'ultimo inviato dal client
   const tzMin = (typeof d.tz_offset_min === 'number') ? d.tz_offset_min : window.tzOffsetMinLastRequest;
-
   const rawTs = Array.isArray(d.timestamps) ? d.timestamps : [];
+
   const parsedDates = rawTs.map(t => {
     if (t == null) return null;
-    // epoch numeric (seconds)
     if (typeof t === 'number' || (typeof t === 'string' && /^\d+$/.test(t))) {
       const epochSec = Number(t);
-
-      // Se abbiamo tzMin, correggiamo i "naive epoch" aggiungendo tzMin minuti
-      // Questo trasforma l'epoch "trattato come UTC" nell'istante UTC reale.
       if (typeof tzMin === 'number') {
-        const corrected = epochSec + (tzMin * 60);
+        // CORRETTO: sottrai tzMin (tzMin è -360 per UTC-6), così ottieni l'istante UTC reale
+        const corrected = epochSec - (tzMin * 60);
         return new Date(corrected * 1000);
       } else {
-        // nessun offset noto: interpreta come epoch UTC normale
         return new Date(epochSec * 1000);
       }
     }
-
-    // fallback: prova a parsare come ISO
     const dt = new Date(t);
     return isNaN(dt.getTime()) ? null : dt;
   }).filter(x => x !== null);
