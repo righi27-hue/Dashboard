@@ -561,71 +561,51 @@ function tzOffsetMinutes(dtLocalStr) {
   return -d.getTimezoneOffset();
 }
 
-// Epoch "naive" che tratta i componenti come UTC (workaround)
+// helper già presente: epochSecondsAsIfUTC(dtLocalStr)
+// (se non l'hai inserito, aggiungi la funzione qui sotto)
 function epochSecondsAsIfUTC(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
   return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()) / 1000);
 }
 
-document.getElementById("btn_load_history").addEventListener("click", () => {
-  const fromRaw = document.getElementById("hist_from").value;
-  const toRaw   = document.getElementById("hist_to").value;
-  const sensors = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
+// --- sostituisci la costruzione della req con questo ---
+const fromEpochUtc = toEpochSecondsUTCFromLocal(fromRaw);
+const toEpochUtc   = toEpochSecondsUTCFromLocal(toRaw);
+const fromEpochNaive = epochSecondsAsIfUTC(fromRaw);
+const toEpochNaive   = epochSecondsAsIfUTC(toRaw);
+const fromIsoUtc   = isoUTCFromLocalString(fromRaw);
+const toIsoUtc     = isoUTCFromLocalString(toRaw);
+const fromIsoLocal = isoLocalWithOffset(fromRaw);
+const toIsoLocal   = isoLocalWithOffset(toRaw);
+const tzOffsetMin  = tzOffsetMinutes(fromRaw);
 
-  // debug immediato: mostra i valori raw del picker
-  console.log("Picker raw values:", { fromRaw, toRaw });
+const req = {
+  type: "get_history",
 
-  if (!fromRaw || !toRaw || sensors.length === 0) {
-    alert("Seleziona almeno un sensore e un intervallo valido");
-    return;
-  }
+  // WORKAROUND: invia i campi che l'ESP32 sembra aspettarsi
+  // imposta i campi principali 'from' e 'to' sul valore "naive"
+  // (questo evita lo shift di -6 ore senza toccare l'ESP32)
+  from: fromEpochNaive,
+  to:   toEpochNaive,
 
-  const fromEpochUtc = toEpochSecondsUTCFromLocal(fromRaw);
-  const toEpochUtc   = toEpochSecondsUTCFromLocal(toRaw);
-  const fromIsoUtc   = isoUTCFromLocalString(fromRaw);
-  const toIsoUtc     = isoUTCFromLocalString(toRaw);
-  const fromIsoLocal = isoLocalWithOffset(fromRaw);
-  const toIsoLocal   = isoLocalWithOffset(toRaw);
-  const tzOffsetMin  = tzOffsetMinutes(fromRaw);
-  const fromEpochNaive = epochSecondsAsIfUTC(fromRaw);
-  const toEpochNaive   = epochSecondsAsIfUTC(toRaw);
+  // mantieni comunque i campi corretti/diagnostici per futuro debug
+  from_epoch_utc: fromEpochUtc,
+  to_epoch_utc:   toEpochUtc,
+  from_epoch_naive: fromEpochNaive,
+  to_epoch_naive:   toEpochNaive,
+  from_iso_utc:    fromIsoUtc,
+  to_iso_utc:      toIsoUtc,
+  from_iso_local:  fromIsoLocal,
+  to_iso_local:    toIsoLocal,
+  tz_offset_min:   tzOffsetMin,
+  sensors: sensors
+};
 
-  // stampa diagnostica completa prima dell'invio
-  console.log("Parsed history request values:", {
-    fromEpochUtc, toEpochUtc,
-    fromIsoUtc, toIsoUtc,
-    fromIsoLocal, toIsoLocal,
-    tzOffsetMin,
-    fromEpochNaive, toEpochNaive
-  });
+console.log("Publishing history request (workaround):", req);
+mqttClient.publish("esp32/history/request", JSON.stringify(req));
 
-  if (fromEpochUtc === null || toEpochUtc === null) {
-    alert("Formato data non valido. Usa il picker o YYYY-MM-DDTHH:MM");
-    return;
-  }
-
-  // reset temporaneo
-  historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
-  chart_history_custom.data.datasets.forEach(ds => ds.data = []);
-  chart_history_custom.data.labels = [];
-  chart_history_custom.update();
-
-  const req = {
-    type: "get_history",
-    from_epoch_utc: fromEpochUtc,
-    to_epoch_utc:   toEpochUtc,
-    from_epoch_naive: fromEpochNaive,
-    to_epoch_naive:   toEpochNaive,
-    from_iso_utc:    fromIsoUtc,
-    to_iso_utc:      toIsoUtc,
-    from_iso_local:  fromIsoLocal,
-    to_iso_local:    toIsoLocal,
-    tz_offset_min:   tzOffsetMin,
-    sensors: sensors
-  };
-
-  console.log("Publishing history request:", req);
+ // console.log("Publishing history request:", req);
 
   if (window.mqttClient) {
     mqttClient.publish("esp32/history/request", JSON.stringify(req));
@@ -708,5 +688,6 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
 
