@@ -1,5 +1,3 @@
-// ===================== dashboard.js (completo, corretto per 24h e asse temporale) =====================
-
 // Forza locale 24h per Chart.js e formatter riutilizzabili
 Chart.defaults.locale = 'it-IT';
 const fmtTime24 = new Intl.DateTimeFormat('it-IT', {
@@ -53,6 +51,8 @@ let historyData = {
     pm25: []
 };
 
+let historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
+
 let sensorColors = {
     temp:"#29b6f6",
     hum:"#fdd835",
@@ -79,7 +79,19 @@ function aiqColor(v) {
     return "#d32f2f";
 }
 
-// ===================== LIVE CHART (asse temporale) =====================
+// ===================== CHARTS CONFIG =====================
+const commonZoomOptions = {
+    zoom: {
+        wheel: { enabled: true, speed: 0.08 },
+        pinch: { enabled: true, speed: 0.08 },
+        drag: { enabled: false },
+        mode: 'x',
+        limits: { x: { minRange: 1000 * 10 } }
+    },
+    pan: { enabled: true, mode: 'x', threshold: 5 }
+};
+
+// LIVE CHART
 let chart_history = new Chart(document.getElementById("chart_history"), {
     type: 'line',
     data: {
@@ -104,13 +116,10 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
                 ticks: {
                     color: "#aaa",
                     callback: function(value) {
-                        // value può essere timestamp o stringa; converti in Date e formatta 24h
                         try {
                             const t = typeof value === 'number' ? new Date(value) : new Date(this.getLabelForValue(value));
                             return fmtTimeOnly24.format(t);
-                        } catch (e) {
-                            return value;
-                        }
+                        } catch (e) { return value; }
                     }
                 }
             },
@@ -127,50 +136,13 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
             },
-            zoom: {
-                zoom: {
-                    wheel: { enabled: true },
-                    pinch: { enabled: true },
-                    mode: 'x',
-                    limits: { x: { minRange: 20 } }
-                },
-                pan: { enabled: true, mode: 'x' }
-            },
+            zoom: commonZoomOptions,
             legend: { onClick: () => {} }
         }
     }
 });
 
-// ===================== CHECKBOX LIVE =====================
-function updateYAxisRange() {
-    let selected = [...document.querySelectorAll(".sensorCheck:checked")].map(c => c.value);
-    if (selected.length === 0) return;
-
-    let min = Infinity;
-    let max = -Infinity;
-
-    selected.forEach(s => {
-        min = Math.min(min, sensorRanges[s].min);
-        max = Math.max(max, sensorRanges[s].max);
-    });
-
-    chart_history.options.scales.y.min = min;
-    chart_history.options.scales.y.max = max;
-    chart_history.update('none');
-}
-
-document.querySelectorAll(".sensorCheck").forEach(chk => {
-    chk.addEventListener("change", () => {
-        chart_history.data.datasets.forEach(ds => {
-            const el = document.querySelector(`input.sensorCheck[value="${ds.label}"]`);
-            ds.hidden = !el || !el.checked;
-        });
-        updateYAxisRange();
-        chart_history.update();
-    });
-});
-
-// ===================== STORICO CUSTOM CHART =====================
+// STORICO CUSTOM CHART
 let chart_history_custom = new Chart(document.getElementById("chart_history_custom"), {
     type: 'line',
     data: {
@@ -199,9 +171,7 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
                         try {
                             const t = typeof value === 'number' ? new Date(value) : new Date(this.getLabelForValue(value));
                             return fmtTimeOnly24.format(t);
-                        } catch (e) {
-                            return value;
-                        }
+                        } catch (e) { return value; }
                     }
                 }
             },
@@ -218,18 +188,22 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
                     label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
                 }
             },
-            legend: { onClick: () => {} },
-            zoom: {
-                zoom: {
-                    wheel: { enabled: true },
-                    pinch: { enabled: true },
-                    mode: 'x',
-                    limits: { x: { minRange: 20 } }
-                },
-                pan: { enabled: true, mode: 'x' }
-            }
+            zoom: commonZoomOptions,
+            legend: { onClick: () => {} }
         }
     }
+});
+
+// ===================== CHECKBOX HANDLERS =====================
+document.querySelectorAll(".sensorCheck").forEach(chk => {
+    chk.addEventListener("change", () => {
+        chart_history.data.datasets.forEach(ds => {
+            const el = document.querySelector(`input.sensorCheck[value="${ds.label}"]`);
+            ds.hidden = !el || !el.checked;
+        });
+        updateYAxisRange();
+        chart_history.update();
+    });
 });
 
 document.querySelectorAll(".histCheck").forEach(chk => {
@@ -238,23 +212,93 @@ document.querySelectorAll(".histCheck").forEach(chk => {
             const el = document.querySelector(`.histCheck[value="${ds.label}"]`);
             ds.hidden = !el || !el.checked;
         });
+        updateYAxisRangeHistory();
         chart_history_custom.update();
     });
 });
 
 document.getElementById("smooth_mode").addEventListener("change", (e) => {
     let smooth = e.target.checked;
-    chart_history_custom.data.datasets.forEach(ds => {
-        ds.spanGaps = smooth;
-    });
+    chart_history_custom.data.datasets.forEach(ds => ds.spanGaps = smooth);
     chart_history_custom.update();
 });
+
+// ===================== Y-AXIS RANGE (LIVE) =====================
+function updateYAxisRange() {
+    const selected = [...document.querySelectorAll(".sensorCheck:checked")].map(c => c.value);
+    if (selected.length === 0) {
+        delete chart_history.options.scales.y.min;
+        delete chart_history.options.scales.y.max;
+        chart_history.update('none');
+        return;
+    }
+
+    let allValues = [];
+    chart_history.data.datasets.forEach(ds => {
+        if (!selected.includes(ds.label)) return;
+        ds.data.forEach(pt => {
+            const v = (pt && typeof pt === 'object') ? pt.y : pt;
+            if (v !== null && v !== undefined && !isNaN(v)) allValues.push(Number(v));
+        });
+    });
+
+    if (allValues.length === 0) {
+        delete chart_history.options.scales.y.min;
+        delete chart_history.options.scales.y.max;
+        chart_history.update('none');
+        return;
+    }
+
+    let min = Math.min(...allValues);
+    let max = Math.max(...allValues);
+    const range = Math.max((max - min), Math.abs(max) * 0.05, 1);
+    const pad = range * 0.06;
+
+    chart_history.options.scales.y.min = Math.max(min - pad, 0);
+    chart_history.options.scales.y.max = max + pad;
+    chart_history.update('none');
+}
+
+// ===================== Y-AXIS RANGE (HISTORIC) =====================
+function updateYAxisRangeHistory() {
+    const selected = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
+    if (selected.length === 0) {
+        delete chart_history_custom.options.scales.y.min;
+        delete chart_history_custom.options.scales.y.max;
+        chart_history_custom.update('none');
+        return;
+    }
+
+    let allValues = [];
+    chart_history_custom.data.datasets.forEach(ds => {
+        if (!selected.includes(ds.label)) return;
+        ds.data.forEach(pt => {
+            const v = (pt && typeof pt === 'object') ? pt.y : pt;
+            if (v !== null && v !== undefined && !isNaN(v)) allValues.push(Number(v));
+        });
+    });
+
+    if (allValues.length === 0) {
+        delete chart_history_custom.options.scales.y.min;
+        delete chart_history_custom.options.scales.y.max;
+        chart_history_custom.update('none');
+        return;
+    }
+
+    let min = Math.min(...allValues);
+    let max = Math.max(...allValues);
+    const range = Math.max((max - min), Math.abs(max) * 0.05, 1);
+    const pad = range * 0.06;
+
+    chart_history_custom.options.scales.y.min = Math.max(min - pad, 0);
+    chart_history_custom.options.scales.y.max = max + pad;
+    chart_history_custom.update('none');
+}
 
 // ===================== WEBSOCKET STATUS =====================
 function updateWSStatus(connected) {
     let el = document.getElementById("ws_status");
     if (!el) return;
-
     if (connected) {
         el.textContent = "🟢 Connesso";
         el.classList.remove("ws_disconnected");
@@ -291,9 +335,8 @@ function startMQTT() {
         let d;
         try { d = JSON.parse(message.toString()); } catch { return; }
 
-        // ===== LIVE DATA =====
         if (topic === "esp32/live") {
-
+            // update DOM
             document.getElementById("co2").innerText  = d.co2;
             document.getElementById("tvoc").innerText = d.tvoc;
             document.getElementById("pm25").innerText = d.pm25;
@@ -302,6 +345,7 @@ function startMQTT() {
             document.getElementById("hum").innerText  = d.hum;
             document.getElementById("press").innerText= d.press;
 
+            // gauges
             g_co2.data.datasets[0].data  = [d.co2/20, 100-(d.co2/20)];
             g_tvoc.data.datasets[0].data = [d.tvoc/10, 100-(d.tvoc/10)];
             g_pm25.data.datasets[0].data = [d.pm25, 100-d.pm25];
@@ -325,7 +369,6 @@ function startMQTT() {
 
             // push live points as {x: Date, y: value}
             let now = new Date();
-
             const pushPoint = (label, value) => {
                 const ds = chart_history.data.datasets.find(s => s.label === label);
                 if (!ds) return;
@@ -358,7 +401,6 @@ function startMQTT() {
             return;
         }
 
-        // ===== STORICO CHUNK =====
         if (topic === "esp32/history_chunk") {
             handleHistoryPacket(d);
             if (!d.done) {
@@ -368,7 +410,6 @@ function startMQTT() {
             return;
         }
 
-        // ===== RELAY STATE =====
         if (topic === "esp32/relay_state") {
             ignoreToggleEvents = true;
             document.getElementById("relay1_toggle").checked = !!d.r1;
@@ -394,7 +435,7 @@ document.getElementById("relay2_toggle").addEventListener("change", (e) => {
 });
 
 // ===================== STORICO REQUEST / HELPERS =====================
-// Non sottrarre offset: Date("YYYY-MM-DDTHH:MM") è locale
+// Date("YYYY-MM-DDTHH:MM") è locale: non sottrarre offset
 function toEpochSecondsLocal(dtLocalStr) {
     return Math.floor(new Date(dtLocalStr).getTime() / 1000);
 }
@@ -430,24 +471,6 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 });
 
 // ===================== STORICO PACKET HANDLER =====================
-let historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
-
-function updateYAxisRangeHistory() {
-    let selected = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
-    if (selected.length === 0) return;
-
-    let min = Infinity;
-    let max = -Infinity;
-
-    selected.forEach(s => {
-        min = Math.min(min, sensorRanges[s].min);
-        max = Math.max(max, sensorRanges[s].max);
-    });
-
-    chart_history_custom.options.scales.y.min = min;
-    chart_history_custom.options.scales.y.max = max;
-}
-
 function handleHistoryPacket(d) {
     // d.timestamps = [epoch_seconds,...], d.data = { temp: [...], ... }, d.done boolean
     if (!d.done) {
@@ -486,7 +509,6 @@ function handleHistoryPacket(d) {
     if (historyCustom.labels.length > 0) {
         const minX = historyCustom.labels[0];
         const maxX = historyCustom.labels[historyCustom.labels.length - 1];
-
         if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
         chart_history_custom.options.scales.x.min = minX;
         chart_history_custom.options.scales.x.max = maxX;
@@ -494,8 +516,3 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
-
-
-
-
-
