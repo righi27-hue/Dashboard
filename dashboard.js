@@ -552,59 +552,77 @@ function isoLocalWithOffset(dtLocalStr) {
   return `${localDatePart}${sign}${hh}:${mm}`;
 }
 
-// Offset in minuti (positivo a est di UTC)
-function tzOffsetMinutes(dtLocalStr) {
+// helper: epoch "naive" che tratta i componenti come se fossero UTC (workaround)
+function epochSecondsAsIfUTC(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
-  return -d.getTimezoneOffset();
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()) / 1000);
 }
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
-    let from = document.getElementById("hist_from").value;
-    let to   = document.getElementById("hist_to").value;
-    let sensors = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
+  const fromRaw = document.getElementById("hist_from").value;
+  const toRaw   = document.getElementById("hist_to").value;
+  const sensors = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
 
-    if (!from || !to || sensors.length === 0) {
-        alert("Seleziona almeno un sensore e un intervallo valido");
-        return;
-    }
+  // debug immediato: mostra i valori raw del picker
+  console.log("Picker raw values:", { fromRaw, toRaw });
 
-    // converti in epoch seconds (UTC) usando il parser locale robusto
-    const fromEpoch = toEpochSecondsUTCFromLocal(from);
-    const toEpoch   = toEpochSecondsUTCFromLocal(to);
-    if (fromEpoch === null || toEpoch === null) {
-        alert("Formato data non valido. Usa il picker o YYYY-MM-DDTHH:MM");
-        return;
-    }
+  if (!fromRaw || !toRaw || sensors.length === 0) {
+    alert("Seleziona almeno un sensore e un intervallo valido");
+    return;
+  }
 
-    // reset temporaneo
-    historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
-    chart_history_custom.data.datasets.forEach(ds => ds.data = []);
-    chart_history_custom.data.labels = [];
-    chart_history_custom.update();
+  const fromEpochUtc = toEpochSecondsUTCFromLocal(fromRaw);
+  const toEpochUtc   = toEpochSecondsUTCFromLocal(toRaw);
+  const fromIsoUtc   = isoUTCFromLocalString(fromRaw);
+  const toIsoUtc     = isoUTCFromLocalString(toRaw);
+  const fromIsoLocal = isoLocalWithOffset(fromRaw);
+  const toIsoLocal   = isoLocalWithOffset(toRaw);
+  const tzOffsetMin  = tzOffsetMinutes(fromRaw);
+  const fromEpochNaive = epochSecondsAsIfUTC(fromRaw);
+  const toEpochNaive   = epochSecondsAsIfUTC(toRaw);
 
-    let req = {
-        type: "get_history",
-        // epoch seconds UTC (univoco)
-        from_epoch_utc: fromEpoch,
-        to_epoch_utc:   toEpoch,
-        // ISO UTC e ISO locale con offset per chiarezza lato server/log
-        from_iso_utc:    isoUTCFromLocalString(from),
-        to_iso_utc:      isoUTCFromLocalString(to),
-        from_iso_local:  isoLocalWithOffset(from),
-        to_iso_local:    isoLocalWithOffset(to),
-        tz_offset_min:   tzOffsetMinutes(from),
-        sensors: sensors
-    };
+  // stampa diagnostica completa prima dell'invio
+  console.log("Parsed history request values:", {
+    fromEpochUtc, toEpochUtc,
+    fromIsoUtc, toIsoUtc,
+    fromIsoLocal, toIsoLocal,
+    tzOffsetMin,
+    fromEpochNaive, toEpochNaive
+  });
 
-    // debug: log della richiesta (rimuovere in produzione)
-    console.log("History request:", req);
+  if (fromEpochUtc === null || toEpochUtc === null) {
+    alert("Formato data non valido. Usa il picker o YYYY-MM-DDTHH:MM");
+    return;
+  }
 
-    if (window.mqttClient) {
-        mqttClient.publish("esp32/history/request", JSON.stringify(req));
-    } else {
-        alert("MQTT non connesso");
-    }
+  // reset temporaneo
+  historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
+  chart_history_custom.data.datasets.forEach(ds => ds.data = []);
+  chart_history_custom.data.labels = [];
+  chart_history_custom.update();
+
+  const req = {
+    type: "get_history",
+    from_epoch_utc: fromEpochUtc,
+    to_epoch_utc:   toEpochUtc,
+    from_epoch_naive: fromEpochNaive,
+    to_epoch_naive:   toEpochNaive,
+    from_iso_utc:    fromIsoUtc,
+    to_iso_utc:      toIsoUtc,
+    from_iso_local:  fromIsoLocal,
+    to_iso_local:    toIsoLocal,
+    tz_offset_min:   tzOffsetMin,
+    sensors: sensors
+  };
+
+  console.log("Publishing history request:", req);
+
+  if (window.mqttClient) {
+    mqttClient.publish("esp32/history/request", JSON.stringify(req));
+  } else {
+    alert("MQTT non connesso");
+  }
 });
 
 // ===================== STORICO PACKET HANDLER =====================
@@ -681,3 +699,4 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
