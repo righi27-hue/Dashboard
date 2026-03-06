@@ -509,8 +509,23 @@ document.getElementById("relay2_toggle").addEventListener("change", (e) => {
 
 // ===================== STORICO REQUEST / HELPERS =====================
 // Date("YYYY-MM-DDTHH:MM") è locale: non sottrarre offset
-function toEpochSecondsLocal(dtLocalStr) {
-    return Math.floor(new Date(dtLocalStr).getTime() / 1000);
+// Converte "YYYY-MM-DDTHH:MM" (o con spazio) in epoch seconds UTC
+function toEpochSecondsUTCFromLocal(dtLocalStr) {
+  const m = dtLocalStr.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (m) {
+    const year = Number(m[1]);
+    const month = Number(m[2]); // 1-12
+    const day = Number(m[3]);
+    const hour = Number(m[4]);
+    const minute = Number(m[5]);
+    const second = m[6] ? Number(m[6]) : 0;
+    const utcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+    return Math.floor(utcMs / 1000);
+  }
+  const d = new Date(dtLocalStr);
+  if (isNaN(d.getTime())) return null;
+  const utcMs = d.getTime() - (d.getTimezoneOffset() * 60000);
+  return Math.floor(utcMs / 1000);
 }
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
@@ -531,8 +546,8 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 
     let req = {
         type: "get_history",
-        from: toEpochSecondsLocal(from),
-        to:   toEpochSecondsLocal(to),
+        from: toEpochSecondsUTCFromLocal(from),
+        to:   toEpochSecondsUTCFromLocal(to),
         sensors: sensors
     };
 
@@ -589,3 +604,4 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
