@@ -512,7 +512,6 @@ document.getElementById("relay2_toggle").addEventListener("change", (e) => {
 // Restituisce un oggetto Date locale oppure null se non valido
 function parseLocalDateTimeString(dtLocalStr) {
   if (!dtLocalStr || typeof dtLocalStr !== 'string') return null;
-  // accetta "YYYY-MM-DDTHH:MM", "YYYY-MM-DDTHH:MM:SS" o con spazio al posto di T
   const m = dtLocalStr.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!m) return null;
   const year = Number(m[1]);
@@ -525,18 +524,39 @@ function parseLocalDateTimeString(dtLocalStr) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// Converte la stringa locale in epoch seconds (UTC) usando la Date locale costruita
-function toEpochSecondsLocal(dtLocalStr) {
+// Epoch seconds UTC (corretto): usa la Date locale e prendi getTime() -> ms UTC
+function toEpochSecondsUTCFromLocal(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
   return Math.floor(d.getTime() / 1000);
 }
 
-// Utility: restituisce ISO UTC dalla stringa locale (utile per debug e per inviare al server)
+// ISO UTC dalla stringa locale (utile per debug e per inviare al server)
 function isoUTCFromLocalString(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
   return new Date(d.getTime()).toISOString();
+}
+
+// ISO locale con offset, es. "2026-03-05T12:00:00-06:00"
+function isoLocalWithOffset(dtLocalStr) {
+  const d = parseLocalDateTimeString(dtLocalStr);
+  if (!d) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  const tzOffsetMin = -d.getTimezoneOffset(); // minutes offset from UTC (positive east)
+  const sign = tzOffsetMin >= 0 ? '+' : '-';
+  const absMin = Math.abs(tzOffsetMin);
+  const hh = pad(Math.floor(absMin / 60));
+  const mm = pad(absMin % 60);
+  const localDatePart = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return `${localDatePart}${sign}${hh}:${mm}`;
+}
+
+// Offset in minuti (positivo a est di UTC)
+function tzOffsetMinutes(dtLocalStr) {
+  const d = parseLocalDateTimeString(dtLocalStr);
+  if (!d) return null;
+  return -d.getTimezoneOffset();
 }
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
@@ -550,8 +570,8 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
     }
 
     // converti in epoch seconds (UTC) usando il parser locale robusto
-    const fromEpoch = toEpochSecondsLocal(from);
-    const toEpoch   = toEpochSecondsLocal(to);
+    const fromEpoch = toEpochSecondsUTCFromLocal(from);
+    const toEpoch   = toEpochSecondsUTCFromLocal(to);
     if (fromEpoch === null || toEpoch === null) {
         alert("Formato data non valido. Usa il picker o YYYY-MM-DDTHH:MM");
         return;
@@ -565,13 +585,20 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 
     let req = {
         type: "get_history",
-        from: fromEpoch,
-        to:   toEpoch,
-        // invia anche gli ISO UTC per chiarezza lato server/log
-        from_iso: isoUTCFromLocalString(from),
-        to_iso:   isoUTCFromLocalString(to),
+        // epoch seconds UTC (univoco)
+        from_epoch_utc: fromEpoch,
+        to_epoch_utc:   toEpoch,
+        // ISO UTC e ISO locale con offset per chiarezza lato server/log
+        from_iso_utc:    isoUTCFromLocalString(from),
+        to_iso_utc:      isoUTCFromLocalString(to),
+        from_iso_local:  isoLocalWithOffset(from),
+        to_iso_local:    isoLocalWithOffset(to),
+        tz_offset_min:   tzOffsetMinutes(from),
         sensors: sensors
     };
+
+    // debug: log della richiesta (rimuovere in produzione)
+    console.log("History request:", req);
 
     if (window.mqttClient) {
         mqttClient.publish("esp32/history/request", JSON.stringify(req));
@@ -581,10 +608,37 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 });
 
 // ===================== STORICO PACKET HANDLER =====================
+// Gestione robusta dei timestamps ricevuti: supporta epoch (number o numeric string) e ISO (con o senza TZ)
 function handleHistoryPacket(d) {
-    // d.timestamps = [epoch_seconds,...], d.data = { temp: [...], ... }, d.done boolean
+    // d.timestamps = [epoch_seconds | "1234567890" | "2026-03-05T12:00:00Z" | "2026-03-05T12:00:00"], d.data = { temp: [...], ... }, d.done boolean
+    console.log('HISTORY CHUNK raw timestamps:', d.timestamps);
+
+    const parseIncomingTimestamp = (t) => {
+      if (t === null || t === undefined) return null;
+      // number -> epoch seconds UTC
+      if (typeof t === 'number') return new Date(t * 1000);
+      // numeric string -> epoch seconds UTC
+      if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000);
+      // ISO with timezone (Z or ±hh:mm) -> Date parses correctly
+      if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+\-]\d{2}:\d{2})$/.test(t)) return new Date(t);
+      // ISO without timezone (bare "YYYY-MM-DDTHH:MM:SS") -> interpretalo come locale (coerente con picker)
+      if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) {
+        // trattalo come locale: costruisci Date con componenti
+        const m = t.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);
+        if (m) {
+          const year = Number(m[1]), month = Number(m[2]), day = Number(m[3]);
+          const hour = Number(m[4]), minute = Number(m[5]), second = Number(m[6]);
+          const local = new Date(year, month - 1, day, hour, minute, second);
+          return isNaN(local.getTime()) ? null : local;
+        }
+      }
+      // fallback: try Date parser
+      const parsed = new Date(t);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    };
+
     if (!d.done) {
-        const newLabels = (d.timestamps || []).map(t => new Date(t * 1000));
+        const newLabels = (d.timestamps || []).map(t => parseIncomingTimestamp(t)).filter(x => x !== null);
         historyCustom.labels.push(...newLabels);
 
         const keys = ["temp","hum","press","co2","tvoc","pm25"];
@@ -616,6 +670,7 @@ function handleHistoryPacket(d) {
 
     updateYAxisRangeHistory();
     updateZoomLimitsForChart(chart_history_custom, 6);
+
     if (historyCustom.labels.length > 0) {
         const minX = historyCustom.labels[0];
         const maxX = historyCustom.labels[historyCustom.labels.length - 1];
