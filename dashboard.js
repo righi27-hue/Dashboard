@@ -122,26 +122,18 @@ function getChartTimeBounds(chart) {
 function updateZoomLimitsForChart(chart, maxZoomOutFactor = 6) {
   const bounds = getChartTimeBounds(chart);
   if (!bounds) {
-    if (chart.options && chart.options.plugins && chart.options.plugins.zoom && chart.options.plugins.zoom.zoom && chart.options.plugins.zoom.zoom.limits && chart.options.plugins.zoom.zoom.limits.x) {
-      chart.options.plugins.zoom.zoom.limits.x.maxRange = Number.MAX_SAFE_INTEGER;
-      chart.options.plugins.zoom.zoom.limits.x.minRange = 1000 * 10;
-    }
-    if (chart.options && chart.options.scales && chart.options.scales.x) {
-      delete chart.options.scales.x.min;
-      delete chart.options.scales.x.max;
-    }
+    chart.options.plugins.zoom.zoom.limits.x.maxRange = Number.MAX_SAFE_INTEGER;
+    chart.options.plugins.zoom.zoom.limits.x.minRange = 1000 * 10;
+    delete chart.options.scales.x.min;
+    delete chart.options.scales.x.max;
     return;
   }
   const dataRange = bounds.max - bounds.min;
   const maxRange = Math.max(dataRange * maxZoomOutFactor, 1000 * 60);
-  if (chart.options && chart.options.plugins && chart.options.plugins.zoom && chart.options.plugins.zoom.zoom && chart.options.plugins.zoom.zoom.limits && chart.options.plugins.zoom.zoom.limits.x) {
-    chart.options.plugins.zoom.zoom.limits.x.maxRange = maxRange;
-  }
+  chart.options.plugins.zoom.zoom.limits.x.maxRange = maxRange;
   // Mantieni i limiti dell'asse per evitare pan oltre i dati
-  if (chart.options && chart.options.scales && chart.options.scales.x) {
-    chart.options.scales.x.min = new Date(bounds.min);
-    chart.options.scales.x.max = new Date(bounds.max);
-  }
+  chart.options.scales.x.min = new Date(bounds.min);
+  chart.options.scales.x.max = new Date(bounds.max);
 }
 
 function clampViewToDataIfNeeded(chart, maxZoomOutFactor = 6) {
@@ -386,25 +378,12 @@ function updateWSStatus(connected) {
 let ignoreToggleEvents = false;
 
 function startMQTT() {
-   window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
-  username: MQTT_USERNAME,
-  password: MQTT_PASSWORD,
-  clean: false,            // mantiene sessione tra riconnessioni
-  reconnectPeriod: 5000,   // tenta riconnessione ogni 5s
-  connectTimeout: 30000,   // timeout connessione 30s
-  keepalive: 60,           // ping ogni 60s
-  clientId: 'web_' + Math.random().toString(16).substr(2,8) // clientId unico per evitare collisioni
-});
-  // <<< Inserisci qui il logging esteso (subito dopo la creazione del client)
-  mqttClient.on("connect", () => console.log("MQTT connected", new Date().toISOString()));
-  mqttClient.on("reconnect", () => console.log("MQTT reconnecting", new Date().toISOString()));
-  mqttClient.on("close", () => console.log("MQTT closed", new Date().toISOString()));
-  mqttClient.on("offline", () => console.log("MQTT offline", new Date().toISOString()));
-  mqttClient.on("error", (err) => console.error("MQTT error:", err && err.message ? err.message : err));
-  // Opzionali, utili per debug avanzato (rimuovere se troppo verbosi)
-  mqttClient.on("packetsend", (p) => console.log("MQTT packetsend", p && p.cmd));
-  mqttClient.on("packetreceive", (p) => console.log("MQTT packetreceive", p && p.cmd));
-  // >>>
+    window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
+        username: MQTT_USERNAME,
+        password: MQTT_PASSWORD,
+        clean: true,
+        reconnectPeriod: 2000
+    });
 
     mqttClient.on("connect", () => {
         updateWSStatus(true);
@@ -528,30 +507,36 @@ document.getElementById("relay2_toggle").addEventListener("change", (e) => {
     sendRelayCommand(2, e.target.checked);
 });
 
-// Converte una stringa locale "YYYY-MM-DDTHH:MM" (o con spazio) in epoch seconds UTC
-function toEpochSecondsUTCFromLocal(dtLocalStr) {
+// ===================== STORICO REQUEST / HELPERS =====================
+// Parser robusto per stringhe locali "YYYY-MM-DDTHH:MM[:SS]" o "YYYY-MM-DD HH:MM[:SS]"
+// Restituisce un oggetto Date locale oppure null se non valido
+function parseLocalDateTimeString(dtLocalStr) {
   if (!dtLocalStr || typeof dtLocalStr !== 'string') return null;
-
-  // Match formato YYYY-MM-DDTHH:MM[:SS]
+  // accetta "YYYY-MM-DDTHH:MM", "YYYY-MM-DDTHH:MM:SS" o con spazio al posto di T
   const m = dtLocalStr.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?$/);
-  if (m) {
-    const year = Number(m[1]);
-    const month = Number(m[2]); // 1-12
-    const day = Number(m[3]);
-    const hour = Number(m[4]);
-    const minute = Number(m[5]);
-    const second = m[6] ? Number(m[6]) : 0;
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]); // 1-12
+  const day = Number(m[3]);
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  const second = m[6] ? Number(m[6]) : 0;
+  const d = new Date(year, month - 1, day, hour, minute, second); // costruisce Date in locale
+  return isNaN(d.getTime()) ? null : d;
+}
 
-    // Costruisce un Date locale con i componenti forniti e restituisce epoch seconds
-    const localDate = new Date(year, month - 1, day, hour, minute, second);
-    if (isNaN(localDate.getTime())) return null;
-    return Math.floor(localDate.getTime() / 1000);
-  }
-
-  // Fallback: prova a creare un Date dalla stringa e usa il suo valore ms (locale -> epoch UTC)
-  const d = new Date(dtLocalStr);
-  if (isNaN(d.getTime())) return null;
+// Converte la stringa locale in epoch seconds (UTC) usando la Date locale costruita
+function toEpochSecondsLocal(dtLocalStr) {
+  const d = parseLocalDateTimeString(dtLocalStr);
+  if (!d) return null;
   return Math.floor(d.getTime() / 1000);
+}
+
+// Utility: restituisce ISO UTC dalla stringa locale (utile per debug e per inviare al server)
+function isoUTCFromLocalString(dtLocalStr) {
+  const d = parseLocalDateTimeString(dtLocalStr);
+  if (!d) return null;
+  return new Date(d.getTime()).toISOString();
 }
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
@@ -564,113 +549,80 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
         return;
     }
 
-    // Usa la conversione UTC dal picker locale
-    const fromEpoch = toEpochSecondsUTCFromLocal(from);
-    const toEpoch   = toEpochSecondsUTCFromLocal(to);
+    // converti in epoch seconds (UTC) usando il parser locale robusto
+    const fromEpoch = toEpochSecondsLocal(from);
+    const toEpoch   = toEpochSecondsLocal(to);
     if (fromEpoch === null || toEpoch === null) {
-        alert("Formato data non valido");
+        alert("Formato data non valido. Usa il picker o YYYY-MM-DDTHH:MM");
         return;
     }
 
-    // Log diagnostici temporanei (rimuovere in produzione)
-    console.log('REQ from epoch:', fromEpoch, 'ISO:', new Date(fromEpoch * 1000).toISOString());
-    console.log('REQ   to epoch:', toEpoch,   'ISO:', new Date(toEpoch * 1000).toISOString());
-
-    let req = {
-      type: "get_history",
-      from: fromEpoch,
-      to:   toEpoch,
-      from_iso: new Date(fromEpoch * 1000).toISOString(),
-      to_iso:   new Date(toEpoch * 1000).toISOString(),
-      sensors: sensors
-    };
-
-    // reset temporaneo UI/dati
+    // reset temporaneo
     historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
     chart_history_custom.data.datasets.forEach(ds => ds.data = []);
     chart_history_custom.data.labels = [];
     chart_history_custom.update();
 
+    let req = {
+        type: "get_history",
+        from: fromEpoch,
+        to:   toEpoch,
+        // invia anche gli ISO UTC per chiarezza lato server/log
+        from_iso: isoUTCFromLocalString(from),
+        to_iso:   isoUTCFromLocalString(to),
+        sensors: sensors
+    };
+
     if (window.mqttClient) {
-      mqttClient.publish("esp32/history/request", JSON.stringify(req));
+        mqttClient.publish("esp32/history/request", JSON.stringify(req));
     } else {
-      alert("MQTT non connesso");
+        alert("MQTT non connesso");
     }
-}); // chiusura listener
-
-// ===================== STORICO PACKET HANDLER =====================
-// Interpreta i timestamps ricevuti come epoch seconds UTC e li converte in Date UTC
-function handleHistoryPacket(d) {
-  // Debug: mostra i timestamps raw e la loro interpretazione ISO
-  console.log('HISTORY CHUNK raw timestamps:', d.timestamps);
-  console.log('HISTORY CHUNK -> ISO:', (d.timestamps || []).map(t => {
-    if (typeof t === 'number') return new Date(t * 1000).toISOString();
-    if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000).toISOString();
-    if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) return (t + 'Z');
-    return t;
-  }));
-
-  // d.timestamps = [epoch_seconds,...], d.data = { temp: [...], ... }, d.done boolean
-  if (!d.done) {
-    // timestamps are epoch seconds from ESP32 -> convert to Date UTC
-    const newLabels = (d.timestamps || []).map(t => {
-        // robust handling: number or numeric string
-        if (typeof t === 'number') return new Date(t * 1000);
-        if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000);
-        // fallback: try ISO parsing (treat bare ISO without TZ as UTC)
-        if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) return new Date(t + 'Z');
-        const parsed = new Date(t);
-        return isNaN(parsed.getTime()) ? null : parsed;
-    }).filter(x => x !== null);
-    historyCustom.labels.push(...newLabels);
-
-    const keys = ["temp","hum","press","co2","tvoc","pm25"];
-    keys.forEach(key => {
-        if (!historyCustom[key]) historyCustom[key] = [];
-        if (d.data && d.data[key]) {
-            historyCustom[key].push(...d.data[key]);
-        } else {
-            for (let i = 0; i < newLabels.length; i++) historyCustom[key].push(null);
-        }
-    });
-    return;
-  }
-
-  // finalize: ensure lengths match
-  const keys = ["temp","hum","press","co2","tvoc","pm25"];
-  keys.forEach(key => {
-      while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
-  });
-
-  // populate datasets as {x:Date, y:value}
-  chart_history_custom.data.datasets.forEach(ds => {
-      const key = ds.label;
-      ds.data = historyCustom.labels.map((t, i) => {
-          const v = historyCustom[key][i];
-          return v === null ? { x: t, y: null } : { x: t, y: v };
-      });
-  });
-
-  updateYAxisRangeHistory();
-  updateZoomLimitsForChart(chart_history_custom, 6);
-  if (historyCustom.labels.length > 0) {
-      const minX = historyCustom.labels[0];
-      const maxX = historyCustom.labels[historyCustom.labels.length - 1];
-      if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
-      chart_history_custom.options.scales.x.min = minX;
-      chart_history_custom.options.scales.x.max = maxX;
-  }
-
-  chart_history_custom.update();
-}
-
-// Rendi startMQTT disponibile globalmente
-window.startMQTT = startMQTT;
-
-// Avvia la connessione in modo sicuro quando il DOM è pronto
-document.addEventListener('DOMContentLoaded', () => {
-  if (typeof startMQTT === 'function') startMQTT();
 });
 
+// ===================== STORICO PACKET HANDLER =====================
+function handleHistoryPacket(d) {
+    // d.timestamps = [epoch_seconds,...], d.data = { temp: [...], ... }, d.done boolean
+    if (!d.done) {
+        const newLabels = (d.timestamps || []).map(t => new Date(t * 1000));
+        historyCustom.labels.push(...newLabels);
 
+        const keys = ["temp","hum","press","co2","tvoc","pm25"];
+        keys.forEach(key => {
+            if (!historyCustom[key]) historyCustom[key] = [];
+            if (d.data && d.data[key]) {
+                historyCustom[key].push(...d.data[key]);
+            } else {
+                for (let i = 0; i < newLabels.length; i++) historyCustom[key].push(null);
+            }
+        });
+        return;
+    }
 
+    // finalize: ensure lengths match
+    const keys = ["temp","hum","press","co2","tvoc","pm25"];
+    keys.forEach(key => {
+        while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
+    });
+
+    // populate datasets as {x:Date, y:value}
+    chart_history_custom.data.datasets.forEach(ds => {
+        const key = ds.label;
+        ds.data = historyCustom.labels.map((t, i) => {
+            const v = historyCustom[key][i];
+            return v === null ? { x: t, y: null } : { x: t, y: v };
+        });
+    });
+
+    updateYAxisRangeHistory();
+    updateZoomLimitsForChart(chart_history_custom, 6);
+    if (historyCustom.labels.length > 0) {
+        const minX = historyCustom.labels[0];
+        const maxX = historyCustom.labels[historyCustom.labels.length - 1];
+        if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
+        chart_history_custom.options.scales.x.min = minX;
+        chart_history_custom.options.scales.x.max = maxX;
+    }
+
+    chart_history_custom.update();
+}
