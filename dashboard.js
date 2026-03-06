@@ -628,68 +628,71 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 
 // ===================== STORICO PACKET HANDLER =====================
 function handleHistoryPacket(d) {
-  console.log('HISTORY CHUNK raw timestamps:', d.timestamps);
+  // debug: mostra il payload intero
+  console.log('HISTORY CHUNK payload:', d);
 
-  const parseIncomingTimestamp = (t) => {
+  // assicurati che d sia un oggetto
+  if (!d || typeof d !== 'object') return;
+
+  // parse sicuro dei timestamps: supporta array di numeri o stringhe numeriche
+  const rawTs = Array.isArray(d.timestamps) ? d.timestamps : [];
+  const parsedDates = rawTs.map(t => {
     if (t === null || t === undefined) return null;
     if (typeof t === 'number') return new Date(t * 1000);
     if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000);
-    if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+\-]\d{2}:\d{2})$/.test(t)) return new Date(t);
-    if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) {
-      const m = t.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);
-      if (m) {
-        const year = Number(m[1]), month = Number(m[2]), day = Number(m[3]);
-        const hour = Number(m[4]), minute = Number(m[5]), second = Number(m[6]);
-        const local = new Date(year, month - 1, day, hour, minute, second);
-        return isNaN(local.getTime()) ? null : local;
-      }
-    }
-    const parsed = new Date(t);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  };
+    // fallback: prova a parsare come ISO
+    const dt = new Date(t);
+    return isNaN(dt.getTime()) ? null : dt;
+  }).filter(x => x !== null);
 
-  if (!d.done) {
-    const newLabels = (d.timestamps || []).map(t => parseIncomingTimestamp(t)).filter(x => x !== null);
-    historyCustom.labels.push(...newLabels);
-
-    const keys = ["temp","hum","press","co2","tvoc","pm25"];
-    keys.forEach(key => {
-      if (!historyCustom[key]) historyCustom[key] = [];
-      if (d.data && d.data[key]) {
-        historyCustom[key].push(...d.data[key]);
-      } else {
-        for (let i = 0; i < newLabels.length; i++) historyCustom[key].push(null);
-      }
-    });
-    return;
+  // se ci sono timestamps utili, aggiungili
+  if (parsedDates.length > 0) {
+    historyCustom.labels.push(...parsedDates);
   }
 
+  // keys sensori
   const keys = ["temp","hum","press","co2","tvoc","pm25"];
   keys.forEach(key => {
-    while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
+    if (!historyCustom[key]) historyCustom[key] = [];
+    if (d.data && Array.isArray(d.data[key]) && d.data[key].length > 0) {
+      historyCustom[key].push(...d.data[key]);
+    } else if (parsedDates.length > 0) {
+      // se non ci sono dati per questo chunk, aggiungi null per ogni timestamp ricevuto
+      for (let i = 0; i < parsedDates.length; i++) historyCustom[key].push(null);
+    }
   });
 
-  chart_history_custom.data.datasets.forEach(ds => {
-    const key = ds.label;
-    ds.data = historyCustom.labels.map((t, i) => {
-      const v = historyCustom[key][i];
-      return v === null ? { x: t, y: null } : { x: t, y: v };
+  // se il messaggio indica done === true, finalizziamo e disegniamo
+  if (d.done) {
+    // assicurati che tutte le serie abbiano la stessa lunghezza
+    keys.forEach(key => {
+      while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
     });
-  });
 
-  updateYAxisRangeHistory();
-  updateZoomLimitsForChart(chart_history_custom, 6);
+    // popola datasets
+    chart_history_custom.data.datasets.forEach(ds => {
+      const key = ds.label;
+      ds.data = historyCustom.labels.map((t, i) => {
+        const v = historyCustom[key][i];
+        return v === null ? { x: t, y: null } : { x: t, y: v };
+      });
+    });
 
-  if (historyCustom.labels.length > 0) {
-    const minX = historyCustom.labels[0];
-    const maxX = historyCustom.labels[historyCustom.labels.length - 1];
-    if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
-    chart_history_custom.options.scales.x.min = minX;
-    chart_history_custom.options.scales.x.max = maxX;
+    updateYAxisRangeHistory();
+    updateZoomLimitsForChart(chart_history_custom, 6);
+
+    if (historyCustom.labels.length > 0) {
+      const minX = historyCustom.labels[0];
+      const maxX = historyCustom.labels[historyCustom.labels.length - 1];
+      if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
+      chart_history_custom.options.scales.x.min = minX;
+      chart_history_custom.options.scales.x.max = maxX;
+    }
+
+    chart_history_custom.update();
   }
-
-  chart_history_custom.update();
 }
+
 
 
 
