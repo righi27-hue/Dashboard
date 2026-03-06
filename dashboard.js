@@ -11,22 +11,22 @@ const fmtTimeOnly24 = new Intl.DateTimeFormat('it-IT', {
 
 // ===================== GAUGE CREATOR + GLOBALS =====================
 function createGauge(ctx, color) {
-    return new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Valore','Restante'],
-            datasets: [{
-                data:[0,100],
-                backgroundColor:[color,'#333'],
-                borderWidth:0
-            }]
-        },
-        options: {
-            cutout:'70%',
-            animation:{duration:200},
-            plugins:{legend:{display:false}}
-        }
-    });
+  return new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Valore','Restante'],
+      datasets: [{
+        data:[0,100],
+        backgroundColor:[color,'#333'],
+        borderWidth:0
+      }]
+    },
+    options: {
+      cutout:'70%',
+      animation:{duration:200},
+      plugins:{legend:{display:false}}
+    }
+  });
 }
 
 let g_co2, g_tvoc, g_pm25, g_aiq, g_temp, g_hum, g_press;
@@ -42,41 +42,41 @@ g_press= createGauge(document.getElementById("g_press"),"#66bb6a");
 let MAX_POINTS = 300;
 
 let historyData = {
-    labels: [],
-    temp: [],
-    hum: [],
-    press: [],
-    co2: [],
-    tvoc: [],
-    pm25: []
+  labels: [],
+  temp: [],
+  hum: [],
+  press: [],
+  co2: [],
+  tvoc: [],
+  pm25: []
 };
 
 let historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
 
 let sensorColors = {
-    temp:"#29b6f6",
-    hum:"#fdd835",
-    press:"#66bb6a",
-    co2:"#ff5252",
-    tvoc:"#ffa726",
-    pm25:"#ab47bc"
+  temp:"#29b6f6",
+  hum:"#fdd835",
+  press:"#66bb6a",
+  co2:"#ff5252",
+  tvoc:"#ffa726",
+  pm25:"#ab47bc"
 };
 
 const sensorRanges = {
-    temp:  { min: 0,   max: 50 },
-    hum:   { min: 0,   max: 100 },
-    press: { min: 870, max: 1084 },
-    co2:   { min: 400, max: 2000 },
-    tvoc:  { min: 0,   max: 600 },
-    pm25:  { min: 0,   max: 150 }
+  temp:  { min: 0,   max: 50 },
+  hum:   { min: 0,   max: 100 },
+  press: { min: 870, max: 1084 },
+  co2:   { min: 400, max: 2000 },
+  tvoc:  { min: 0,   max: 600 },
+  pm25:  { min: 0,   max: 150 }
 };
 
 function aiqColor(v) {
-    if (v <= 50)  return "#00e676";
-    if (v <= 100) return "#cddc39";
-    if (v <= 150) return "#ffb300";
-    if (v <= 200) return "#ff7043";
-    return "#d32f2f";
+  if (v <= 50)  return "#00e676";
+  if (v <= 100) return "#cddc39";
+  if (v <= 150) return "#ffb300";
+  if (v <= 200) return "#ff7043";
+  return "#d32f2f";
 }
 
 // ===================== ZOOM / PAN COMMON OPTIONS =====================
@@ -153,105 +153,105 @@ function clampViewToDataIfNeeded(chart, maxZoomOutFactor = 6) {
 
 // ===================== LIVE CHART =====================
 let chart_history = new Chart(document.getElementById("chart_history"), {
-    type: 'line',
-    data: {
-        datasets: [
-            { label:"temp",  borderColor:sensorColors.temp,  data:[],  tension:0.3, hidden:false },
-            { label:"hum",   borderColor:sensorColors.hum,   data:[],  tension:0.3, hidden:false },
-            { label:"press", borderColor:sensorColors.press, data:[],  tension:0.3, hidden:true },
-            { label:"co2",   borderColor:sensorColors.co2,   data:[],  tension:0.3, hidden:true },
-            { label:"tvoc",  borderColor:sensorColors.tvoc,  data:[],  tension:0.3, hidden:true },
-            { label:"pm25",  borderColor:sensorColors.pm25,  data:[],  tension:0.3, hidden:true }
-        ]
-    },
-    options: {
-        animation: { duration: 150 },
-        scales: {
-            x: {
-                type: "time",
-                time: {
-                    tooltipFormat: "yyyy-MM-dd HH:mm:ss",
-                    displayFormats: { second: "HH:mm:ss", minute: "HH:mm", hour: "HH:mm" }
-                },
-                ticks: {
-                    color: "#aaa",
-                    callback: function(value) {
-                        try {
-                            const t = typeof value === 'number' ? new Date(value) : new Date(this.getLabelForValue(value));
-                            return fmtTimeOnly24.format(t);
-                        } catch (e) { return value; }
-                    }
-                }
-            },
-            y: { ticks: { color: "#aaa" } }
+  type: 'line',
+  data: {
+    datasets: [
+      { label:"temp",  borderColor:sensorColors.temp,  data:[],  tension:0.3, hidden:false },
+      { label:"hum",   borderColor:sensorColors.hum,   data:[],  tension:0.3, hidden:false },
+      { label:"press", borderColor:sensorColors.press, data:[],  tension:0.3, hidden:true },
+      { label:"co2",   borderColor:sensorColors.co2,   data:[],  tension:0.3, hidden:true },
+      { label:"tvoc",  borderColor:sensorColors.tvoc,  data:[],  tension:0.3, hidden:true },
+      { label:"pm25",  borderColor:sensorColors.pm25,  data:[],  tension:0.3, hidden:true }
+    ]
+  },
+  options: {
+    animation: { duration: 150 },
+    scales: {
+      x: {
+        type: "time",
+        time: {
+          tooltipFormat: "yyyy-MM-dd HH:mm:ss",
+          displayFormats: { second: "HH:mm:ss", minute: "HH:mm", hour: "HH:mm" }
         },
-        plugins: {
-            tooltip: {
-                callbacks: {
-                    title: (items) => {
-                        const raw = items[0].parsed.x;
-                        const dt = raw instanceof Date ? raw : new Date(raw);
-                        return fmtTime24.format(dt);
-                    },
-                    label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
-                }
-            },
-            zoom: commonZoomOptions,
-            legend: { onClick: () => {} }
+        ticks: {
+          color: "#aaa",
+          callback: function(value) {
+            try {
+              const t = typeof value === 'number' ? new Date(value) : new Date(this.getLabelForValue(value));
+              return fmtTimeOnly24.format(t);
+            } catch (e) { return value; }
+          }
         }
+      },
+      y: { ticks: { color: "#aaa" } }
+    },
+    plugins: {
+      tooltip: {
+        callbacks: {
+          title: (items) => {
+            const raw = items[0].parsed.x;
+            const dt = raw instanceof Date ? raw : new Date(raw);
+            return fmtTime24.format(dt);
+          },
+          label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
+        }
+      },
+      zoom: commonZoomOptions,
+      legend: { onClick: () => {} }
     }
+  }
 });
 
 // ===================== STORICO CUSTOM CHART =====================
 let chart_history_custom = new Chart(document.getElementById("chart_history_custom"), {
-    type: 'line',
-    data: {
-        datasets: [
-            { label:"temp",  borderColor:sensorColors.temp,  data:[],  tension:0.3, hidden:false },
-            { label:"hum",   borderColor:sensorColors.hum,   data:[],  tension:0.3, hidden:false },
-            { label:"press", borderColor:sensorColors.press, data:[],  tension:0.3, hidden:true },
-            { label:"co2",   borderColor:sensorColors.co2,   data:[],  tension:0.3, hidden:true },
-            { label:"tvoc",  borderColor:sensorColors.tvoc,  data:[],  tension:0.3, hidden:true },
-            { label:"pm25",  borderColor:sensorColors.pm25,  data:[],  tension:0.3, hidden:true }
-        ]
-    },
-    options: {
-        animation: { duration: 0 },
-        scales: {
-            x: {
-                type: "time",
-                time: {
-                    unit: "minute",
-                    tooltipFormat: "yyyy-MM-dd HH:mm:ss",
-                    displayFormats: { minute: "HH:mm", hour: "HH:mm" }
-                },
-                ticks: {
-                    color: "#aaa",
-                    callback: function(value) {
-                        try {
-                            const t = typeof value === 'number' ? new Date(value) : new Date(this.getLabelForValue(value));
-                            return fmtTimeOnly24.format(t);
-                        } catch (e) { return value; }
-                    }
-                }
-            },
-            y: { ticks: { color: "#aaa" } }
+  type: 'line',
+  data: {
+    datasets: [
+      { label:"temp",  borderColor:sensorColors.temp,  data:[],  tension:0.3, hidden:false },
+      { label:"hum",   borderColor:sensorColors.hum,   data:[],  tension:0.3, hidden:false },
+      { label:"press", borderColor:sensorColors.press, data:[],  tension:0.3, hidden:true },
+      { label:"co2",   borderColor:sensorColors.co2,   data:[],  tension:0.3, hidden:true },
+      { label:"tvoc",  borderColor:sensorColors.tvoc,  data:[],  tension:0.3, hidden:true },
+      { label:"pm25",  borderColor:sensorColors.pm25,  data:[],  tension:0.3, hidden:true }
+    ]
+  },
+  options: {
+    animation: { duration: 0 },
+    scales: {
+      x: {
+        type: "time",
+        time: {
+          unit: "minute",
+          tooltipFormat: "yyyy-MM-dd HH:mm:ss",
+          displayFormats: { minute: "HH:mm", hour: "HH:mm" }
         },
-        plugins: {
-            tooltip: {
-                callbacks: {
-                    title: (items) => {
-                        const raw = items[0].parsed.x;
-                        const dt = raw instanceof Date ? raw : new Date(raw);
-                        return fmtTime24.format(dt);
-                    },
-                    label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
-                }
-            },
-            zoom: commonZoomOptions,
-            legend: { onClick: () => {} }
+        ticks: {
+          color: "#aaa",
+          callback: function(value) {
+            try {
+              const t = typeof value === 'number' ? new Date(value) : new Date(this.getLabelForValue(value));
+              return fmtTimeOnly24.format(t);
+            } catch (e) { return value; }
+          }
         }
+      },
+      y: { ticks: { color: "#aaa" } }
+    },
+    plugins: {
+      tooltip: {
+        callbacks: {
+          title: (items) => {
+            const raw = items[0].parsed.x;
+            const dt = raw instanceof Date ? raw : new Date(raw);
+            return fmtTime24.format(dt);
+          },
+          label: (item) => item.dataset.label.toUpperCase() + ": " + item.formattedValue
+        }
+      },
+      zoom: commonZoomOptions,
+      legend: { onClick: () => {} }
     }
+  }
 });
 
 // inizializza limiti zoom basici
@@ -260,251 +260,254 @@ updateZoomLimitsForChart(chart_history_custom, 6);
 
 // ===================== CHECKBOX HANDLERS =====================
 document.querySelectorAll(".sensorCheck").forEach(chk => {
-    chk.addEventListener("change", () => {
-        chart_history.data.datasets.forEach(ds => {
-            const el = document.querySelector(`input.sensorCheck[value="${ds.label}"]`);
-            ds.hidden = !el || !el.checked;
-        });
-        updateYAxisRange();
-        chart_history.update();
+  chk.addEventListener("change", () => {
+    chart_history.data.datasets.forEach(ds => {
+      const el = document.querySelector(`input.sensorCheck[value="${ds.label}"]`);
+      ds.hidden = !el || !el.checked;
     });
+    updateYAxisRange();
+    chart_history.update();
+  });
 });
 
 document.querySelectorAll(".histCheck").forEach(chk => {
-    chk.addEventListener("change", () => {
-        chart_history_custom.data.datasets.forEach(ds => {
-            const el = document.querySelector(`.histCheck[value="${ds.label}"]`);
-            ds.hidden = !el || !el.checked;
-        });
-        updateYAxisRangeHistory();
-        chart_history_custom.update();
+  chk.addEventListener("change", () => {
+    chart_history_custom.data.datasets.forEach(ds => {
+      const el = document.querySelector(`.histCheck[value="${ds.label}"]`);
+      ds.hidden = !el || !el.checked;
     });
+    updateYAxisRangeHistory();
+    chart_history_custom.update();
+  });
 });
 
 document.getElementById("smooth_mode").addEventListener("change", (e) => {
-    let smooth = e.target.checked;
-    chart_history_custom.data.datasets.forEach(ds => ds.spanGaps = smooth);
-    chart_history_custom.update();
+  let smooth = e.target.checked;
+  chart_history_custom.data.datasets.forEach(ds => ds.spanGaps = smooth);
+  chart_history_custom.update();
 });
 
 // ===================== Y-AXIS RANGE (LIVE) =====================
 function updateYAxisRange() {
-    const selected = [...document.querySelectorAll(".sensorCheck:checked")].map(c => c.value);
-    if (selected.length === 0) {
-        delete chart_history.options.scales.y.min;
-        delete chart_history.options.scales.y.max;
-        chart_history.update('none');
-        return;
-    }
-
-    let allValues = [];
-    chart_history.data.datasets.forEach(ds => {
-        if (!selected.includes(ds.label)) return;
-        ds.data.forEach(pt => {
-            const v = (pt && typeof pt === 'object') ? pt.y : pt;
-            if (v !== null && v !== undefined && !isNaN(v)) allValues.push(Number(v));
-        });
-    });
-
-    if (allValues.length === 0) {
-        delete chart_history.options.scales.y.min;
-        delete chart_history.options.scales.y.max;
-        chart_history.update('none');
-        return;
-    }
-
-    let min = Math.min(...allValues);
-    let max = Math.max(...allValues);
-    const range = Math.max((max - min), Math.abs(max) * 0.05, 1);
-    const pad = range * 0.06;
-
-    chart_history.options.scales.y.min = Math.max(min - pad, 0);
-    chart_history.options.scales.y.max = max + pad;
+  const selected = [...document.querySelectorAll(".sensorCheck:checked")].map(c => c.value);
+  if (selected.length === 0) {
+    delete chart_history.options.scales.y.min;
+    delete chart_history.options.scales.y.max;
     chart_history.update('none');
+    return;
+  }
+
+  let allValues = [];
+  chart_history.data.datasets.forEach(ds => {
+    if (!selected.includes(ds.label)) return;
+    ds.data.forEach(pt => {
+      const v = (pt && typeof pt === 'object') ? pt.y : pt;
+      if (v !== null && v !== undefined && !isNaN(v)) allValues.push(Number(v));
+    });
+  });
+
+  if (allValues.length === 0) {
+    delete chart_history.options.scales.y.min;
+    delete chart_history.options.scales.y.max;
+    chart_history.update('none');
+    return;
+  }
+
+  let min = Math.min(...allValues);
+  let max = Math.max(...allValues);
+  const range = Math.max((max - min), Math.abs(max) * 0.05, 1);
+  const pad = range * 0.06;
+
+  chart_history.options.scales.y.min = Math.max(min - pad, 0);
+  chart_history.options.scales.y.max = max + pad;
+  chart_history.update('none');
 }
 
 // ===================== Y-AXIS RANGE (HISTORIC) =====================
 function updateYAxisRangeHistory() {
-    const selected = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
-    if (selected.length === 0) {
-        delete chart_history_custom.options.scales.y.min;
-        delete chart_history_custom.options.scales.y.max;
-        chart_history_custom.update('none');
-        return;
-    }
-
-    let allValues = [];
-    chart_history_custom.data.datasets.forEach(ds => {
-        if (!selected.includes(ds.label)) return;
-        ds.data.forEach(pt => {
-            const v = (pt && typeof pt === 'object') ? pt.y : pt;
-            if (v !== null && v !== undefined && !isNaN(v)) allValues.push(Number(v));
-        });
-    });
-
-    if (allValues.length === 0) {
-        delete chart_history_custom.options.scales.y.min;
-        delete chart_history_custom.options.scales.y.max;
-        chart_history_custom.update('none');
-        return;
-    }
-
-    let min = Math.min(...allValues);
-    let max = Math.max(...allValues);
-    const range = Math.max((max - min), Math.abs(max) * 0.05, 1);
-    const pad = range * 0.06;
-
-    chart_history_custom.options.scales.y.min = Math.max(min - pad, 0);
-    chart_history_custom.options.scales.y.max = max + pad;
+  const selected = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
+  if (selected.length === 0) {
+    delete chart_history_custom.options.scales.y.min;
+    delete chart_history_custom.options.scales.y.max;
     chart_history_custom.update('none');
+    return;
+  }
+
+  let allValues = [];
+  chart_history_custom.data.datasets.forEach(ds => {
+    if (!selected.includes(ds.label)) return;
+    ds.data.forEach(pt => {
+      const v = (pt && typeof pt === 'object') ? pt.y : pt;
+      if (v !== null && v !== undefined && !isNaN(v)) allValues.push(Number(v));
+    });
+  });
+
+  if (allValues.length === 0) {
+    delete chart_history_custom.options.scales.y.min;
+    delete chart_history_custom.options.scales.y.max;
+    chart_history_custom.update('none');
+    return;
+  }
+
+  let min = Math.min(...allValues);
+  let max = Math.max(...allValues);
+  const range = Math.max((max - min), Math.abs(max) * 0.05, 1);
+  const pad = range * 0.06;
+
+  chart_history_custom.options.scales.y.min = Math.max(min - pad, 0);
+  chart_history_custom.options.scales.y.max = max + pad;
+  chart_history_custom.update('none');
 }
 
 // ===================== WEBSOCKET STATUS =====================
 function updateWSStatus(connected) {
-    let el = document.getElementById("ws_status");
-    if (!el) return;
-    if (connected) {
-        el.textContent = "🟢 Connesso";
-        el.classList.remove("ws_disconnected");
-        el.classList.add("ws_connected");
-    } else {
-        el.textContent = "🔴 Disconnesso — riconnessione…";
-        el.classList.remove("ws_connected");
-        el.classList.add("ws_disconnected");
-    }
+  let el = document.getElementById("ws_status");
+  if (!el) return;
+  if (connected) {
+    el.textContent = "🟢 Connesso";
+    el.classList.remove("ws_disconnected");
+    el.classList.add("ws_connected");
+  } else {
+    el.textContent = "🔴 Disconnesso — riconnessione…";
+    el.classList.remove("ws_connected");
+    el.classList.add("ws_disconnected");
+  }
 }
 
 // ===================== MQTT + LIVE HANDLING + RELAY =====================
 let ignoreToggleEvents = false;
 
+// assicurati che la variabile globale per l'offset esista UNA SOLA VOLTA
+if (typeof window.tzOffsetMinLastRequest === 'undefined') window.tzOffsetMinLastRequest = null;
+
 function startMQTT() {
-    window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
-        username: MQTT_USERNAME,
-        password: MQTT_PASSWORD,
-        clean: true,
-        reconnectPeriod: 2000
-    });
+  window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
+    username: MQTT_USERNAME,
+    password: MQTT_PASSWORD,
+    clean: true,
+    reconnectPeriod: 2000
+  });
 
-    mqttClient.on("connect", () => {
-        updateWSStatus(true);
-        mqttClient.subscribe("esp32/live");
-        mqttClient.subscribe("esp32/history_chunk");
-        mqttClient.subscribe("esp32/relay_state");
-    });
+  mqttClient.on("connect", () => {
+    updateWSStatus(true);
+    mqttClient.subscribe("esp32/live");
+    mqttClient.subscribe("esp32/history_chunk");
+    mqttClient.subscribe("esp32/relay_state");
+  });
 
-    mqttClient.on("close", () => updateWSStatus(false));
-    mqttClient.on("error", () => updateWSStatus(false));
+  mqttClient.on("close", () => updateWSStatus(false));
+  mqttClient.on("error", () => updateWSStatus(false));
 
-    mqttClient.on("message", (topic, message) => {
-        let d;
-        try { d = JSON.parse(message.toString()); } catch { return; }
+  mqttClient.on("message", (topic, message) => {
+    let d;
+    try { d = JSON.parse(message.toString()); } catch { return; }
 
-        if (topic === "esp32/live") {
-            // update DOM
-            document.getElementById("co2").innerText  = d.co2;
-            document.getElementById("tvoc").innerText = d.tvoc;
-            document.getElementById("pm25").innerText = d.pm25;
-            document.getElementById("aiq").innerText  = d.aiq;
-            document.getElementById("temp").innerText = d.temp;
-            document.getElementById("hum").innerText  = d.hum;
-            document.getElementById("press").innerText= d.press;
+    if (topic === "esp32/live") {
+      // update DOM
+      document.getElementById("co2").innerText  = d.co2;
+      document.getElementById("tvoc").innerText = d.tvoc;
+      document.getElementById("pm25").innerText = d.pm25;
+      document.getElementById("aiq").innerText  = d.aiq;
+      document.getElementById("temp").innerText = d.temp;
+      document.getElementById("hum").innerText  = d.hum;
+      document.getElementById("press").innerText= d.press;
 
-            // gauges
-            g_co2.data.datasets[0].data  = [d.co2/20, 100-(d.co2/20)];
-            g_tvoc.data.datasets[0].data = [d.tvoc/10, 100-(d.tvoc/10)];
-            g_pm25.data.datasets[0].data = [d.pm25, 100-d.pm25];
+      // gauges
+      g_co2.data.datasets[0].data  = [d.co2/20, 100-(d.co2/20)];
+      g_tvoc.data.datasets[0].data = [d.tvoc/10, 100-(d.tvoc/10)];
+      g_pm25.data.datasets[0].data = [d.pm25, 100-d.pm25];
 
-            let aiqVal = Math.min(d.aiq, 500) / 5;
-            let aiqCol = aiqColor(d.aiq);
-            g_aiq.data.datasets[0].backgroundColor[0] = aiqCol;
-            g_aiq.data.datasets[0].data = [aiqVal, 100 - aiqVal];
+      let aiqVal = Math.min(d.aiq, 500) / 5;
+      let aiqCol = aiqColor(d.aiq);
+      g_aiq.data.datasets[0].backgroundColor[0] = aiqCol;
+      g_aiq.data.datasets[0].data = [aiqVal, 100 - aiqVal];
 
-            g_temp.data.datasets[0].data = [d.temp, 100-d.temp];
-            g_hum.data.datasets[0].data  = [d.hum, 100-d.hum];
-            g_press.data.datasets[0].data= [(d.press-980)/0.4, 100-((d.press-980)/0.4)];
+      g_temp.data.datasets[0].data = [d.temp, 100-d.temp];
+      g_hum.data.datasets[0].data  = [d.hum, 100-d.hum];
+      g_press.data.datasets[0].data= [(d.press-980)/0.4, 100-((d.press-980)/0.4)];
 
-            g_co2.update();
-            g_tvoc.update();
-            g_pm25.update();
-            g_aiq.update();
-            g_temp.update();
-            g_hum.update();
-            g_press.update();
+      g_co2.update();
+      g_tvoc.update();
+      g_pm25.update();
+      g_aiq.update();
+      g_temp.update();
+      g_hum.update();
+      g_press.update();
 
-            // push live points as {x: Date, y: value}
-            let now = new Date();
-            const pushPoint = (label, value) => {
-                const ds = chart_history.data.datasets.find(s => s.label === label);
-                if (!ds) return;
-                ds.data.push({ x: now, y: value });
-                if (ds.data.length > MAX_POINTS) ds.data.shift();
-            };
+      // push live points as {x: Date, y: value}
+      let now = new Date();
+      const pushPoint = (label, value) => {
+        const ds = chart_history.data.datasets.find(s => s.label === label);
+        if (!ds) return;
+        ds.data.push({ x: now, y: value });
+        if (ds.data.length > MAX_POINTS) ds.data.shift();
+      };
 
-            pushPoint("temp", d.temp);
-            pushPoint("hum", d.hum);
-            pushPoint("press", d.press);
-            pushPoint("co2", d.co2);
-            pushPoint("tvoc", d.tvoc);
-            pushPoint("pm25", d.pm25);
+      pushPoint("temp", d.temp);
+      pushPoint("hum", d.hum);
+      pushPoint("press", d.press);
+      pushPoint("co2", d.co2);
+      pushPoint("tvoc", d.tvoc);
+      pushPoint("pm25", d.pm25);
 
-            // keep historyData arrays (optional)
-            historyData.labels.push(now);
-            historyData.temp.push(d.temp);
-            historyData.hum.push(d.hum);
-            historyData.press.push(d.press);
-            historyData.co2.push(d.co2);
-            historyData.tvoc.push(d.tvoc);
-            historyData.pm25.push(d.pm25);
+      // keep historyData arrays (optional)
+      historyData.labels.push(now);
+      historyData.temp.push(d.temp);
+      historyData.hum.push(d.hum);
+      historyData.press.push(d.press);
+      historyData.co2.push(d.co2);
+      historyData.tvoc.push(d.tvoc);
+      historyData.pm25.push(d.pm25);
 
-            if (historyData.labels.length > MAX_POINTS) {
-                Object.keys(historyData).forEach(k => historyData[k].shift());
-            }
+      if (historyData.labels.length > MAX_POINTS) {
+        Object.keys(historyData).forEach(k => historyData[k].shift());
+      }
 
-            // aggiorna scala Y e limiti zoom basati sui dati
-            updateYAxisRange();
-            updateZoomLimitsForChart(chart_history, 6);
-            // se la vista è già fuori controllo, la riportiamo (opzionale)
-            clampViewToDataIfNeeded(chart_history, 6);
+      // aggiorna scala Y e limiti zoom basati sui dati
+      updateYAxisRange();
+      updateZoomLimitsForChart(chart_history, 6);
+      // se la vista è già fuori controllo, la riportiamo (opzionale)
+      clampViewToDataIfNeeded(chart_history, 6);
 
-            chart_history.update('none');
-            return;
-        }
+      chart_history.update('none');
+      return;
+    }
 
-        if (topic === "esp32/history_chunk") {
-            handleHistoryPacket(d);
-            if (!d.done) {
-                const ack = { chunkId: d.chunkId || 0 };
-                mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
-            } else {
-                // quando lo storico è completo, aggiorna limiti zoom e scala Y
-                updateZoomLimitsForChart(chart_history_custom, 6);
-                updateYAxisRangeHistory();
-            }
-            return;
-        }
+    if (topic === "esp32/history_chunk") {
+      handleHistoryPacket(d);
+      if (!d.done) {
+        const ack = { chunkId: d.chunkId || 0 };
+        mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
+      } else {
+        // quando lo storico è completo, aggiorna limiti zoom e scala Y
+        updateZoomLimitsForChart(chart_history_custom, 6);
+        updateYAxisRangeHistory();
+      }
+      return;
+    }
 
-        if (topic === "esp32/relay_state") {
-            ignoreToggleEvents = true;
-            document.getElementById("relay1_toggle").checked = !!d.r1;
-            document.getElementById("relay2_toggle").checked = !!d.r2;
-            ignoreToggleEvents = false;
-            return;
-        }
-    });
+    if (topic === "esp32/relay_state") {
+      ignoreToggleEvents = true;
+      document.getElementById("relay1_toggle").checked = !!d.r1;
+      document.getElementById("relay2_toggle").checked = !!d.r2;
+      ignoreToggleEvents = false;
+      return;
+    }
+  });
 }
 
 function sendRelayCommand(id, state) {
-    if (!window.mqttClient) return;
-    mqttClient.publish(`esp32/cmd/relay${id}`, state ? "1" : "0");
+  if (!window.mqttClient) return;
+  mqttClient.publish(`esp32/cmd/relay${id}`, state ? "1" : "0");
 }
 
 document.getElementById("relay1_toggle").addEventListener("change", (e) => {
-    if (ignoreToggleEvents) return;
-    sendRelayCommand(1, e.target.checked);
+  if (ignoreToggleEvents) return;
+  sendRelayCommand(1, e.target.checked);
 });
 document.getElementById("relay2_toggle").addEventListener("change", (e) => {
-    if (ignoreToggleEvents) return;
-    sendRelayCommand(2, e.target.checked);
+  if (ignoreToggleEvents) return;
+  sendRelayCommand(2, e.target.checked);
 });
 
 // ===================== STORICO REQUEST / HELPERS =====================
@@ -559,7 +562,8 @@ function epochSecondsAsIfUTC(dtLocalStr) {
   if (!d) return null;
   return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()) / 1000);
 }
-let tzOffsetMinLastRequest = null;
+
+// Nota: la variabile globale per l'offset è già stata creata sopra come window.tzOffsetMinLastRequest
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
   const fromRaw = document.getElementById("hist_from").value;
@@ -618,6 +622,9 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
     sensors: sensors
   };
 
+  // salva l'offset dell'ultima richiesta prima di pubblicare
+  window.tzOffsetMinLastRequest = tzOffsetMin;
+
   console.log("Publishing history request (workaround):", req);
 
   if (window.mqttClient) {
@@ -627,17 +634,14 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
   }
 });
 
-// Assumi che tzOffsetMinLastRequest sia impostato quando fai la richiesta
-// es. tzOffsetMinLastRequest = tzOffsetMinutes(fromRaw);
-let tzOffsetMinLastRequest = null; // globale, impostalo quando pubblichi la request
-
+// handleHistoryPacket: robusto e con correzione "naive epoch" -> UTC reale
 function handleHistoryPacket(d) {
   console.log('HISTORY CHUNK payload:', d);
   if (!d || typeof d !== 'object') return;
 
   // decide se dobbiamo applicare la correzione "naive -> UTC reale"
-  // se tzOffsetMinLastRequest è null, non correggiamo (fallback)
-  const tzMin = (typeof d.tz_offset_min === 'number') ? d.tz_offset_min : tzOffsetMinLastRequest;
+  // preferiamo l'offset inviato nel chunk, altrimenti usiamo l'ultimo inviato dal client
+  const tzMin = (typeof d.tz_offset_min === 'number') ? d.tz_offset_min : window.tzOffsetMinLastRequest;
 
   const rawTs = Array.isArray(d.timestamps) ? d.timestamps : [];
   const parsedDates = rawTs.map(t => {
@@ -699,10 +703,3 @@ function handleHistoryPacket(d) {
     chart_history_custom.update();
   }
 }
-
-
-
-
-
-
-
