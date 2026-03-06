@@ -563,7 +563,7 @@ function epochSecondsAsIfUTC(dtLocalStr) {
   return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()) / 1000);
 }
 
-// Assicuriamoci che la variabile globale esista (una sola volta)
+// Assicuriamoci che le variabili globali esistano (una sola volta)
 if (typeof window.tzOffsetMinLastRequest === 'undefined') window.tzOffsetMinLastRequest = null;
 if (typeof window.lastHistoryRequest === 'undefined') window.lastHistoryRequest = null;
 
@@ -661,6 +661,7 @@ function handleHistoryPacket(d) {
     if (typeof tzMinToUse !== 'number' || times === 0) {
       return new Date(epochSec * 1000);
     }
+    // CORRETTO: sottrai tzMin (tzMin è -d.getTimezoneOffset()), times volte
     const corrected = epochSec - (times * tzMinToUse * 60);
     return new Date(corrected * 1000);
   };
@@ -800,4 +801,3 @@ function handleHistoryPacket(d) {
     chart_history_custom.update();
   }
 }
-
