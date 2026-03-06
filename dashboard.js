@@ -1,4 +1,4 @@
-// dashboard.js - versione aggiornata: 24h, parsing UTC-robusto, zoom "on focus", gap-safe segments
+// dashboard.js - versione finale: 24h, parsing UTC-robusto, gap-safe, zoom on-focus
 
 // Forza locale 24h per Chart.js e formatter riutilizzabili
 Chart.defaults.locale = 'it-IT';
@@ -56,17 +56,16 @@ function aiqColor(v) {
 }
 
 // ===================== ZOOM / PAN COMMON OPTIONS =====================
-// Wheel speed molto dolce; limiti plugin aggiornati dinamicamente
+// Wheel speed molto dolce; wheel abilitato solo on-focus
 const commonZoomOptions = {
   zoom: {
-    // speed molto bassa; wheel.enabled verrà attivato/disattivato onmouseenter/onmouseleave
-    wheel: { enabled: false, speed: 0.01 },
+    wheel: { enabled: false, speed: 0.008 },
     pinch: { enabled: true, speed: 0.02 },
     drag: { enabled: false },
     mode: 'x',
     limits: { x: { minRange: 1000 * 10, maxRange: Number.MAX_SAFE_INTEGER } }
   },
-  pan: { enabled: true, mode: 'x', threshold: 8 }
+  pan: { enabled: true, mode: 'x', threshold: 10 }
 };
 
 // ===================== HELPERS TIMESTAMP / ZOOM / SEGMENT =====================
@@ -135,12 +134,16 @@ function clampViewToDataIfNeeded(chart, maxZoomOutFactor = 6) {
 const GAP_THRESHOLD_MS = 1000 * 60 * 5; // 5 minuti
 
 function segmentHideIfGap(ctx) {
-  // ctx.p0 e ctx.p1 sono i punti consecutivi
-  if (!ctx.p0 || !ctx.p1) return ctx.dataset.borderColor;
-  const t0 = ctx.p0.parsed && ctx.p0.parsed.x ? new Date(ctx.p0.parsed.x).getTime() : NaN;
-  const t1 = ctx.p1.parsed && ctx.p1.parsed.x ? new Date(ctx.p1.parsed.x).getTime() : NaN;
-  if (isNaN(t0) || isNaN(t1)) return ctx.dataset.borderColor;
-  return (Math.abs(t1 - t0) > GAP_THRESHOLD_MS) ? 'rgba(0,0,0,0)' : ctx.dataset.borderColor;
+  // Protezioni: ctx, dataset e punti potrebbero non essere definiti in alcuni momenti
+  if (!ctx || !ctx.dataset) return (ctx && ctx.dataset) ? ctx.dataset.borderColor : 'rgba(0,0,0,0)';
+  // Se non ci sono punti consecutivi, ritorna il colore normale
+  if (!ctx.p0 || !ctx.p1) return ctx.dataset.borderColor || 'rgba(0,0,0,0)';
+  // Estrai timestamp in modo sicuro
+  const t0 = (ctx.p0.parsed && ctx.p0.parsed.x) ? new Date(ctx.p0.parsed.x).getTime() : NaN;
+  const t1 = (ctx.p1.parsed && ctx.p1.parsed.x) ? new Date(ctx.p1.parsed.x).getTime() : NaN;
+  if (isNaN(t0) || isNaN(t1)) return ctx.dataset.borderColor || 'rgba(0,0,0,0)';
+  // Se il gap è troppo grande, rendi il segmento trasparente (nascondilo)
+  return (Math.abs(t1 - t0) > GAP_THRESHOLD_MS) ? 'rgba(0,0,0,0)' : (ctx.dataset.borderColor || 'rgba(0,0,0,0)');
 }
 
 // ===================== LIVE CHART =====================
@@ -148,12 +151,12 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
   type: 'line',
   data: {
     datasets: [
-      { label:"temp",  borderColor:sensorColors.temp,  data:[], tension:0.3, hidden:false, segment:{borderColor: segmentHideIfGap} },
-      { label:"hum",   borderColor:sensorColors.hum,   data:[], tension:0.3, hidden:false, segment:{borderColor: segmentHideIfGap} },
-      { label:"press", borderColor:sensorColors.press, data:[], tension:0.3, hidden:true,  segment:{borderColor: segmentHideIfGap} },
-      { label:"co2",   borderColor:sensorColors.co2,   data:[], tension:0.3, hidden:true,  segment:{borderColor: segmentHideIfGap} },
-      { label:"tvoc",  borderColor:sensorColors.tvoc,  data:[], tension:0.3, hidden:true,  segment:{borderColor: segmentHideIfGap} },
-      { label:"pm25",  borderColor:sensorColors.pm25,  data:[], tension:0.3, hidden:true,  segment:{borderColor: segmentHideIfGap} }
+      { label:"temp",  borderColor:sensorColors.temp,  data:[], tension:0.3, hidden:false, spanGaps:false, segment:{borderColor: segmentHideIfGap} },
+      { label:"hum",   borderColor:sensorColors.hum,   data:[], tension:0.3, hidden:false, spanGaps:false, segment:{borderColor: segmentHideIfGap} },
+      { label:"press", borderColor:sensorColors.press, data:[], tension:0.3, hidden:true,  spanGaps:false, segment:{borderColor: segmentHideIfGap} },
+      { label:"co2",   borderColor:sensorColors.co2,   data:[], tension:0.3, hidden:true,  spanGaps:false, segment:{borderColor: segmentHideIfGap} },
+      { label:"tvoc",  borderColor:sensorColors.tvoc,  data:[], tension:0.3, hidden:true,  spanGaps:false, segment:{borderColor: segmentHideIfGap} },
+      { label:"pm25",  borderColor:sensorColors.pm25,  data:[], tension:0.3, hidden:true,  spanGaps:false, segment:{borderColor: segmentHideIfGap} }
     ]
   },
   options: {
@@ -182,20 +185,22 @@ let chart_history = new Chart(document.getElementById("chart_history"), {
 });
 
 // Attiva/disattiva zoom wheel solo quando il mouse è sopra il canvas (comportamento "on focus")
-chart_history.canvas.addEventListener('mouseenter', () => { chart_history.options.plugins.zoom.zoom.wheel.enabled = true; });
-chart_history.canvas.addEventListener('mouseleave', () => { chart_history.options.plugins.zoom.zoom.wheel.enabled = false; });
+if (chart_history && chart_history.canvas) {
+  chart_history.canvas.addEventListener('mouseenter', () => { chart_history.options.plugins.zoom.zoom.wheel.enabled = true; });
+  chart_history.canvas.addEventListener('mouseleave', () => { chart_history.options.plugins.zoom.zoom.wheel.enabled = false; });
+}
 
 // ===================== STORICO CUSTOM CHART =====================
 let chart_history_custom = new Chart(document.getElementById("chart_history_custom"), {
   type: 'line',
   data: {
     datasets: [
-      { label:"temp",  borderColor:sensorColors.temp,  data:[], tension:0.3, hidden:false, segment:{borderColor: segmentHideIfGap} },
-      { label:"hum",   borderColor:sensorColors.hum,   data:[], tension:0.3, hidden:false, segment:{borderColor: segmentHideIfGap} },
-      { label:"press", borderColor:sensorColors.press, data:[], tension:0.3, hidden:true,  segment:{borderColor: segmentHideIfGap} },
-      { label:"co2",   borderColor:sensorColors.co2,   data:[], tension:0.3, hidden:true,  segment:{borderColor: segmentHideIfGap} },
-      { label:"tvoc",  borderColor:sensorColors.tvoc,  data:[], tension:0.3, hidden:true,  segment:{borderColor: segmentHideIfGap} },
-      { label:"pm25",  borderColor:sensorColors.pm25,  data:[], tension:0.3, hidden:true,  segment:{borderColor: segmentHideIfGap} }
+      { label:"temp",  borderColor:sensorColors.temp,  data:[], tension:0.3, hidden:false, spanGaps:false, segment:{borderColor: segmentHideIfGap} },
+      { label:"hum",   borderColor:sensorColors.hum,   data:[], tension:0.3, hidden:false, spanGaps:false, segment:{borderColor: segmentHideIfGap} },
+      { label:"press", borderColor:sensorColors.press, data:[], tension:0.3, hidden:true,  spanGaps:false, segment:{borderColor: segmentHideIfGap} },
+      { label:"co2",   borderColor:sensorColors.co2,   data:[], tension:0.3, hidden:true,  spanGaps:false, segment:{borderColor: segmentHideIfGap} },
+      { label:"tvoc",  borderColor:sensorColors.tvoc,  data:[], tension:0.3, hidden:true,  spanGaps:false, segment:{borderColor: segmentHideIfGap} },
+      { label:"pm25",  borderColor:sensorColors.pm25,  data:[], tension:0.3, hidden:true,  spanGaps:false, segment:{borderColor: segmentHideIfGap} }
     ]
   },
   options: {
@@ -224,8 +229,10 @@ let chart_history_custom = new Chart(document.getElementById("chart_history_cust
 });
 
 // Attiva/disattiva zoom wheel solo quando il mouse è sopra il canvas (comportamento "on focus")
-chart_history_custom.canvas.addEventListener('mouseenter', () => { chart_history_custom.options.plugins.zoom.zoom.wheel.enabled = true; });
-chart_history_custom.canvas.addEventListener('mouseleave', () => { chart_history_custom.options.plugins.zoom.zoom.wheel.enabled = false; });
+if (chart_history_custom && chart_history_custom.canvas) {
+  chart_history_custom.canvas.addEventListener('mouseenter', () => { chart_history_custom.options.plugins.zoom.zoom.wheel.enabled = true; });
+  chart_history_custom.canvas.addEventListener('mouseleave', () => { chart_history_custom.options.plugins.zoom.zoom.wheel.enabled = false; });
+}
 
 // inizializza limiti zoom basici
 updateZoomLimitsForChart(chart_history, 6);
@@ -394,8 +401,14 @@ function startMQTT() {
         const ack = { chunkId: d.chunkId || 0 };
         mqttClient.publish("esp32/history/ack", JSON.stringify(ack));
       } else {
+        // quando lo storico è completo, aggiorna limiti plugin e scala Y e fissa la vista sui dati
         updateZoomLimitsForChart(chart_history_custom, 6);
         updateYAxisRangeHistory();
+        const bounds = getChartTimeBounds(chart_history_custom);
+        if (bounds) {
+          chart_history_custom.options.scales.x.min = new Date(bounds.min);
+          chart_history_custom.options.scales.x.max = new Date(bounds.max);
+        }
       }
       return;
     }
@@ -419,10 +432,10 @@ document.getElementById("relay1_toggle").addEventListener("change", (e) => { if 
 document.getElementById("relay2_toggle").addEventListener("change", (e) => { if (ignoreToggleEvents) return; sendRelayCommand(2, e.target.checked); });
 
 // ===================== STORICO REQUEST / HELPERS =====================
-// Invia ISO 8601 con timezone per evitare ambiguità di fuso orario
-function toISOStringLocal(dtLocalStr) {
+// Invia epoch seconds UTC per evitare ambiguità di fuso orario
+function toEpochSecondsUTC(dtLocalStr) {
   const d = new Date(dtLocalStr);
-  return d.toISOString();
+  return Math.floor(d.getTime() / 1000);
 }
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
@@ -437,8 +450,7 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
   chart_history_custom.data.labels = [];
   chart_history_custom.update();
 
-  // invia ISO (UTC) — il server dovrebbe interpretare correttamente
-  let req = { type: "get_history", from: toISOStringLocal(from), to: toISOStringLocal(to), sensors: sensors };
+  let req = { type: "get_history", from: toEpochSecondsUTC(from), to: toEpochSecondsUTC(to), sensors: sensors };
 
   if (window.mqttClient) mqttClient.publish("esp32/history/request", JSON.stringify(req));
   else alert("MQTT non connesso");
@@ -446,6 +458,7 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 
 // ===================== STORICO PACKET HANDLER =====================
 function handleHistoryPacket(d) {
+  if (!d || !d.timestamps) return;
   if (!d.done) {
     const newLabels = (d.timestamps || []).map(t => parseTimestampToDate(t));
     historyCustom.labels.push(...newLabels);
@@ -473,13 +486,14 @@ function handleHistoryPacket(d) {
   updateYAxisRangeHistory();
   updateZoomLimitsForChart(chart_history_custom, 6);
 
-  if (historyCustom.labels.length > 0) {
-    const minX = historyCustom.labels[0];
-    const maxX = historyCustom.labels[historyCustom.labels.length - 1];
+  // fissa la vista ai limiti dati (solo dopo che lo storico è completo)
+  const bounds = getChartTimeBounds(chart_history_custom);
+  if (bounds) {
     if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
-    chart_history_custom.options.scales.x.min = minX;
-    chart_history_custom.options.scales.x.max = maxX;
+    chart_history_custom.options.scales.x.min = new Date(bounds.min);
+    chart_history_custom.options.scales.x.max = new Date(bounds.max);
   }
 
   chart_history_custom.update();
 }
+
