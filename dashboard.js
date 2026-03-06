@@ -559,6 +559,7 @@ function epochSecondsAsIfUTC(dtLocalStr) {
   if (!d) return null;
   return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()) / 1000);
 }
+let tzOffsetMinLastRequest = null;
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
   const fromRaw = document.getElementById("hist_from").value;
@@ -626,44 +627,58 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
   }
 });
 
-// ===================== STORICO PACKET HANDLER =====================
+// Assumi che tzOffsetMinLastRequest sia impostato quando fai la richiesta
+// es. tzOffsetMinLastRequest = tzOffsetMinutes(fromRaw);
+let tzOffsetMinLastRequest = null; // globale, impostalo quando pubblichi la request
+
 function handleHistoryPacket(d) {
   console.log('HISTORY CHUNK payload:', d);
   if (!d || typeof d !== 'object') return;
 
-  // estrai timestamps in modo sicuro
+  // decide se dobbiamo applicare la correzione "naive -> UTC reale"
+  // se tzOffsetMinLastRequest è null, non correggiamo (fallback)
+  const tzMin = (typeof d.tz_offset_min === 'number') ? d.tz_offset_min : tzOffsetMinLastRequest;
+
   const rawTs = Array.isArray(d.timestamps) ? d.timestamps : [];
   const parsedDates = rawTs.map(t => {
     if (t == null) return null;
-    if (typeof t === 'number') return new Date(t * 1000);
-    if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000);
+    // epoch numeric (seconds)
+    if (typeof t === 'number' || (typeof t === 'string' && /^\d+$/.test(t))) {
+      const epochSec = Number(t);
+
+      // Se abbiamo tzMin, correggiamo i "naive epoch" aggiungendo tzMin minuti
+      // Questo trasforma l'epoch "trattato come UTC" nell'istante UTC reale.
+      if (typeof tzMin === 'number') {
+        const corrected = epochSec + (tzMin * 60);
+        return new Date(corrected * 1000);
+      } else {
+        // nessun offset noto: interpreta come epoch UTC normale
+        return new Date(epochSec * 1000);
+      }
+    }
+
+    // fallback: prova a parsare come ISO
     const dt = new Date(t);
     return isNaN(dt.getTime()) ? null : dt;
   }).filter(x => x !== null);
 
-  // aggiungi le date ricevute (se presenti)
   if (parsedDates.length) historyCustom.labels.push(...parsedDates);
 
-  // campi sensori attesi
   const keys = ["temp","hum","press","co2","tvoc","pm25"];
   keys.forEach(key => {
     if (!historyCustom[key]) historyCustom[key] = [];
     if (d.data && Array.isArray(d.data[key]) && d.data[key].length) {
       historyCustom[key].push(...d.data[key]);
     } else if (parsedDates.length) {
-      // se non ci sono dati per questo chunk, aggiungi null per ogni timestamp ricevuto
       for (let i = 0; i < parsedDates.length; i++) historyCustom[key].push(null);
     }
   });
 
-  // se è il messaggio finale, finalizza e aggiorna il grafico
   if (d.done) {
-    // allinea lunghezze
     keys.forEach(key => {
       while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
     });
 
-    // costruisci datasets come {x: Date, y: value}
     chart_history_custom.data.datasets.forEach(ds => {
       const key = ds.label;
       ds.data = historyCustom.labels.map((t, i) => {
@@ -672,7 +687,6 @@ function handleHistoryPacket(d) {
       });
     });
 
-    // aggiorna assi, limiti e grafico
     updateYAxisRangeHistory();
     updateZoomLimitsForChart(chart_history_custom, 6);
 
@@ -685,6 +699,7 @@ function handleHistoryPacket(d) {
     chart_history_custom.update();
   }
 }
+
 
 
 
