@@ -524,14 +524,16 @@ function parseLocalDateTimeString(dtLocalStr) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// Epoch seconds UTC (corretto): usa la Date locale e prendi getTime() -> ms UTC
+// Parser robusto già presente: parseLocalDateTimeString(...)
+
+// Epoch seconds UTC (corretto)
 function toEpochSecondsUTCFromLocal(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
   return Math.floor(d.getTime() / 1000);
 }
 
-// ISO UTC dalla stringa locale (utile per debug e per inviare al server)
+// ISO UTC dalla stringa locale
 function isoUTCFromLocalString(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
@@ -543,7 +545,7 @@ function isoLocalWithOffset(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
   const pad = (n) => String(n).padStart(2, '0');
-  const tzOffsetMin = -d.getTimezoneOffset(); // minutes offset from UTC (positive east)
+  const tzOffsetMin = -d.getTimezoneOffset();
   const sign = tzOffsetMin >= 0 ? '+' : '-';
   const absMin = Math.abs(tzOffsetMin);
   const hh = pad(Math.floor(absMin / 60));
@@ -552,7 +554,14 @@ function isoLocalWithOffset(dtLocalStr) {
   return `${localDatePart}${sign}${hh}:${mm}`;
 }
 
-// helper: epoch "naive" che tratta i componenti come se fossero UTC (workaround)
+// Offset in minuti (positivo a est di UTC)
+function tzOffsetMinutes(dtLocalStr) {
+  const d = parseLocalDateTimeString(dtLocalStr);
+  if (!d) return null;
+  return -d.getTimezoneOffset();
+}
+
+// Epoch "naive" che tratta i componenti come UTC (workaround)
 function epochSecondsAsIfUTC(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
@@ -699,4 +708,5 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
