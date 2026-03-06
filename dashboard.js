@@ -570,11 +570,20 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 });
 
 // ===================== STORICO PACKET HANDLER =====================
+// Interpreta i timestamps ricevuti come epoch seconds UTC e li converte in Date UTC
 function handleHistoryPacket(d) {
     // d.timestamps = [epoch_seconds,...], d.data = { temp: [...], ... }, d.done boolean
     if (!d.done) {
         // timestamps are epoch seconds from ESP32 -> convert to Date UTC
-        const newLabels = (d.timestamps || []).map(t => new Date(t * 1000));
+        const newLabels = (d.timestamps || []).map(t => {
+            // robust handling: number or numeric string
+            if (typeof t === 'number') return new Date(t * 1000);
+            if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000);
+            // fallback: try ISO parsing (treat bare ISO without TZ as UTC)
+            if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) return new Date(t + 'Z');
+            const parsed = new Date(t);
+            return isNaN(parsed.getTime()) ? null : parsed;
+        }).filter(x => x !== null);
         historyCustom.labels.push(...newLabels);
 
         const keys = ["temp","hum","press","co2","tvoc","pm25"];
