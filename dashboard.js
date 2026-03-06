@@ -628,48 +628,42 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 
 // ===================== STORICO PACKET HANDLER =====================
 function handleHistoryPacket(d) {
-  // debug: mostra il payload intero
   console.log('HISTORY CHUNK payload:', d);
-
-  // assicurati che d sia un oggetto
   if (!d || typeof d !== 'object') return;
 
-  // parse sicuro dei timestamps: supporta array di numeri o stringhe numeriche
+  // estrai timestamps in modo sicuro
   const rawTs = Array.isArray(d.timestamps) ? d.timestamps : [];
   const parsedDates = rawTs.map(t => {
-    if (t === null || t === undefined) return null;
+    if (t == null) return null;
     if (typeof t === 'number') return new Date(t * 1000);
     if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000);
-    // fallback: prova a parsare come ISO
     const dt = new Date(t);
     return isNaN(dt.getTime()) ? null : dt;
   }).filter(x => x !== null);
 
-  // se ci sono timestamps utili, aggiungili
-  if (parsedDates.length > 0) {
-    historyCustom.labels.push(...parsedDates);
-  }
+  // aggiungi le date ricevute (se presenti)
+  if (parsedDates.length) historyCustom.labels.push(...parsedDates);
 
-  // keys sensori
+  // campi sensori attesi
   const keys = ["temp","hum","press","co2","tvoc","pm25"];
   keys.forEach(key => {
     if (!historyCustom[key]) historyCustom[key] = [];
-    if (d.data && Array.isArray(d.data[key]) && d.data[key].length > 0) {
+    if (d.data && Array.isArray(d.data[key]) && d.data[key].length) {
       historyCustom[key].push(...d.data[key]);
-    } else if (parsedDates.length > 0) {
+    } else if (parsedDates.length) {
       // se non ci sono dati per questo chunk, aggiungi null per ogni timestamp ricevuto
       for (let i = 0; i < parsedDates.length; i++) historyCustom[key].push(null);
     }
   });
 
-  // se il messaggio indica done === true, finalizziamo e disegniamo
+  // se è il messaggio finale, finalizza e aggiorna il grafico
   if (d.done) {
-    // assicurati che tutte le serie abbiano la stessa lunghezza
+    // allinea lunghezze
     keys.forEach(key => {
       while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
     });
 
-    // popola datasets
+    // costruisci datasets come {x: Date, y: value}
     chart_history_custom.data.datasets.forEach(ds => {
       const key = ds.label;
       ds.data = historyCustom.labels.map((t, i) => {
@@ -678,20 +672,20 @@ function handleHistoryPacket(d) {
       });
     });
 
+    // aggiorna assi, limiti e grafico
     updateYAxisRangeHistory();
     updateZoomLimitsForChart(chart_history_custom, 6);
 
-    if (historyCustom.labels.length > 0) {
-      const minX = historyCustom.labels[0];
-      const maxX = historyCustom.labels[historyCustom.labels.length - 1];
+    if (historyCustom.labels.length) {
+      chart_history_custom.options.scales.x.min = historyCustom.labels[0];
+      chart_history_custom.options.scales.x.max = historyCustom.labels[historyCustom.labels.length - 1];
       if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
-      chart_history_custom.options.scales.x.min = minX;
-      chart_history_custom.options.scales.x.max = maxX;
     }
 
     chart_history_custom.update();
   }
 }
+
 
 
 
