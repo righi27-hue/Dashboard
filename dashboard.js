@@ -563,7 +563,9 @@ function epochSecondsAsIfUTC(dtLocalStr) {
   return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()) / 1000);
 }
 
-// Nota: la variabile globale per l'offset è già stata creata sopra come window.tzOffsetMinLastRequest
+// Assicuriamoci che la variabile globale esista (una sola volta)
+if (typeof window.tzOffsetMinLastRequest === 'undefined') window.tzOffsetMinLastRequest = null;
+if (typeof window.lastHistoryRequest === 'undefined') window.lastHistoryRequest = null;
 
 document.getElementById("btn_load_history").addEventListener("click", () => {
   const fromRaw = document.getElementById("hist_from").value;
@@ -622,8 +624,13 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
     sensors: sensors
   };
 
-  // salva l'offset dell'ultima richiesta prima di pubblicare
+  // salva l'offset e i bound della richiesta per diagnostica e per la scelta automatica
   window.tzOffsetMinLastRequest = tzOffsetMin;
+  window.lastHistoryRequest = {
+    fromEpochUtc: fromEpochUtc,
+    toEpochUtc: toEpochUtc,
+    tzOffsetMin: tzOffsetMin
+  };
 
   console.log("Publishing history request (workaround):", req);
 
@@ -634,39 +641,115 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
   }
 });
 
-// handleHistoryPacket: robusto e con correzione "naive epoch" -> UTC reale
+// handleHistoryPacket: robusto, rileva doppia applicazione e sceglie la correzione migliore
 function handleHistoryPacket(d) {
   console.log('HISTORY CHUNK payload:', d);
   if (!d || typeof d !== 'object') return;
 
-  const tzMin = (typeof d.tz_offset_min === 'number') ? d.tz_offset_min : window.tzOffsetMinLastRequest;
-  const rawTs = Array.isArray(d.timestamps) ? d.timestamps : [];
+  const chunkTz = (typeof d.tz_offset_min === 'number') ? d.tz_offset_min : null;
+  const clientTz = (typeof window.tzOffsetMinLastRequest === 'number') ? window.tzOffsetMinLastRequest : null;
+  const req = window.lastHistoryRequest || null;
+  const reqFrom = req ? req.fromEpochUtc : null;
+  const reqTo   = req ? req.toEpochUtc : null;
 
-  const parsedDates = rawTs.map(t => {
+  const rawTs = Array.isArray(d.timestamps) ? d.timestamps : [];
+  if (!rawTs.length && !d.done) return;
+
+  const applyCorrection = (epochSec, tzMinToUse, times = 0) => {
+    if (typeof epochSec !== 'number') epochSec = Number(epochSec);
+    if (isNaN(epochSec)) return null;
+    if (typeof tzMinToUse !== 'number' || times === 0) {
+      return new Date(epochSec * 1000);
+    }
+    const corrected = epochSec - (times * tzMinToUse * 60);
+    return new Date(corrected * 1000);
+  };
+
+  const sampleRaw = rawTs.find(x => x != null);
+  let chosenTimes = 0;
+  let tzUsed = null;
+
+  if (sampleRaw != null) {
+    const candidates = [];
+    candidates.push({ times: 0, tz: null, date: applyCorrection(sampleRaw, null, 0) });
+
+    if (typeof chunkTz === 'number') {
+      candidates.push({ times: 1, tz: chunkTz, date: applyCorrection(sampleRaw, chunkTz, 1) });
+      candidates.push({ times: 2, tz: chunkTz, date: applyCorrection(sampleRaw, chunkTz, 2) });
+    }
+    if (typeof clientTz === 'number') {
+      candidates.push({ times: 1, tz: clientTz, date: applyCorrection(sampleRaw, clientTz, 1) });
+      candidates.push({ times: 2, tz: clientTz, date: applyCorrection(sampleRaw, clientTz, 2) });
+    }
+
+    const uniq = [];
+    const seen = new Set();
+    candidates.forEach(c => {
+      if (!c.date || isNaN(c.date.getTime())) return;
+      const key = c.date.getTime() + '|' + c.times + '|' + c.tz;
+      if (!seen.has(key)) { seen.add(key); uniq.push(c); }
+    });
+
+    if (reqFrom !== null && reqTo !== null && uniq.length) {
+      const inRange = uniq.filter(c => {
+        const s = Math.floor(c.date.getTime() / 1000);
+        return s >= reqFrom && s <= reqTo;
+      });
+      if (inRange.length === 1) {
+        chosenTimes = inRange[0].times;
+        tzUsed = inRange[0].tz;
+      } else if (inRange.length > 1) {
+        const prefer = inRange.find(c => c.tz === chunkTz) || inRange.find(c => c.tz === clientTz) || inRange.find(c => c.times === 1);
+        chosenTimes = prefer.times;
+        tzUsed = prefer.tz;
+      } else {
+        const center = (reqFrom + reqTo) / 2;
+        let best = null; let bestDiff = Infinity;
+        uniq.forEach(c => {
+          const diff = Math.abs(Math.floor(c.date.getTime() / 1000) - center);
+          if (diff < bestDiff) { bestDiff = diff; best = c; }
+        });
+        if (best) { chosenTimes = best.times; tzUsed = best.tz; }
+      }
+    } else {
+      if (chunkTz !== null) { chosenTimes = 1; tzUsed = chunkTz; }
+      else if (clientTz !== null) { chosenTimes = 1; tzUsed = clientTz; }
+      else { chosenTimes = 0; tzUsed = null; }
+    }
+
+    console.log('history: sampleRaw', sampleRaw,
+                'chosenTimes', chosenTimes, 'tzUsed', tzUsed,
+                'sampleDates:',
+                'noCorr', applyCorrection(sampleRaw, null, 0).toString(),
+                'oneCorr(chunk?)', (chunkTz!==null?applyCorrection(sampleRaw, chunkTz,1).toString():'n/a'),
+                'oneCorr(client?)', (clientTz!==null?applyCorrection(sampleRaw, clientTz,1).toString():'n/a'));
+  }
+
+  const tzToApply = (tzUsed !== null) ? tzUsed : (clientTz !== null ? clientTz : chunkTz);
+  const finalDates = rawTs.map(t => {
     if (t == null) return null;
     if (typeof t === 'number' || (typeof t === 'string' && /^\d+$/.test(t))) {
       const epochSec = Number(t);
-      if (typeof tzMin === 'number') {
-        // CORRETTO: sottrai tzMin (tzMin è -360 per UTC-6), così ottieni l'istante UTC reale
-        const corrected = epochSec - (tzMin * 60);
-        return new Date(corrected * 1000);
-      } else {
+      if (chosenTimes === 0 || typeof tzToApply !== 'number') {
         return new Date(epochSec * 1000);
+      } else {
+        const corrected = epochSec - (chosenTimes * tzToApply * 60);
+        return new Date(corrected * 1000);
       }
     }
     const dt = new Date(t);
     return isNaN(dt.getTime()) ? null : dt;
   }).filter(x => x !== null);
 
-  if (parsedDates.length) historyCustom.labels.push(...parsedDates);
+  if (finalDates.length) historyCustom.labels.push(...finalDates);
 
   const keys = ["temp","hum","press","co2","tvoc","pm25"];
   keys.forEach(key => {
     if (!historyCustom[key]) historyCustom[key] = [];
     if (d.data && Array.isArray(d.data[key]) && d.data[key].length) {
       historyCustom[key].push(...d.data[key]);
-    } else if (parsedDates.length) {
-      for (let i = 0; i < parsedDates.length; i++) historyCustom[key].push(null);
+    } else if (finalDates.length) {
+      for (let i = 0; i < finalDates.length; i++) historyCustom[key].push(null);
     }
   });
 
@@ -674,6 +757,28 @@ function handleHistoryPacket(d) {
     keys.forEach(key => {
       while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
     });
+
+    const combined = historyCustom.labels.map((dt, i) => ({ t: dt.getTime(), i }));
+    combined.sort((a,b) => a.t - b.t);
+    const unique = [];
+    const seen = new Set();
+    combined.forEach(c => {
+      if (!seen.has(c.t)) { seen.add(c.t); unique.push(c); }
+    });
+    const sortedLabels = unique.map(u => new Date(u.t));
+
+    const rebuilt = {};
+    keys.forEach(k => rebuilt[k] = []);
+    sortedLabels.forEach((lbl, idx) => {
+      const orig = combined.find(c => c.t === lbl.getTime());
+      const origIndex = orig ? orig.i : null;
+      keys.forEach(k => {
+        rebuilt[k].push(origIndex !== null && historyCustom[k][origIndex] !== undefined ? historyCustom[k][origIndex] : null);
+      });
+    });
+
+    historyCustom.labels = sortedLabels;
+    keys.forEach(k => historyCustom[k] = rebuilt[k]);
 
     chart_history_custom.data.datasets.forEach(ds => {
       const key = ds.label;
@@ -695,3 +800,4 @@ function handleHistoryPacket(d) {
     chart_history_custom.update();
   }
 }
+
