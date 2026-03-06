@@ -1,9 +1,10 @@
-// dashboard.js - versione completa e corretta
+// dashboard.js - versione completa senza popup all'avvio
+// - nessun prompt automatico per credenziali
 // - parsing timestamp robusto (epoch sec/ms, ISO senza TZ -> UTC)
 // - storico richiesto in epoch seconds UTC (picker -> UTC)
 // - segment callback per evitare wrap-around (gap > 5 min)
 // - zoom wheel on-focus, sensibilità ridotta
-// - MQTT resiliente: usa credenziali globali se presenti, prompt, fallback broker pubblico
+// - MQTT resiliente: usa credenziali globali se presenti, altrimenti tenta broker pubblico di fallback senza prompt
 // - protezioni DOM per evitare crash silenziosi
 // - helper di simulazione window.__simulateLive()
 // NOTE: assicurati che mqtt.min.js sia incluso PRIMA di questo file nell'HTML
@@ -349,6 +350,7 @@
   const PRIMARY_BROKER = 'wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt';
   const FALLBACK_BROKER = 'wss://test.mosquitto.org:8081/mqtt';
 
+  // getCredentials now only returns global constants if present; NO prompt
   function getCredentials(){
     try {
       if (typeof MQTT_USERNAME !== 'undefined' && typeof MQTT_PASSWORD !== 'undefined' && MQTT_USERNAME && MQTT_PASSWORD) {
@@ -356,14 +358,7 @@
         return { username: MQTT_USERNAME, password: MQTT_PASSWORD };
       }
     } catch(e){}
-    // prompt once
-    try {
-      const u = window.prompt('Inserisci MQTT username (lascia vuoto per usare broker pubblico di test):', '');
-      if (!u) return null;
-      const p = window.prompt('Inserisci MQTT password:', '');
-      if (p === null) return null;
-      return { username: u, password: p };
-    } catch(e){ return null; }
+    return null; // no prompt, no popup
   }
 
   function startMQTTWith(brokerUrl, creds){
@@ -424,7 +419,8 @@
 
     const creds = getCredentials();
     if (!creds) {
-      logD('No credentials provided; using fallback public broker');
+      // No global credentials: do not prompt; use fallback broker silently
+      logD('No global credentials found; using fallback public broker');
       __triedFallback = true;
       mqttClient = startMQTTWith(FALLBACK_BROKER, null);
       return;
@@ -433,6 +429,7 @@
     mqttClient = startMQTTWith(PRIMARY_BROKER, creds);
   }
 
+  // Start automatically but without popups
   document.addEventListener('DOMContentLoaded', ()=> tryStartMQTT(false));
 
   // ---------- Incoming message handler ----------
@@ -599,7 +596,7 @@
     return '#d32f2f';
   }
 
-  // ---------- Expose debug helpers ----------
+  // ---------- Expose debug helpers (no prompt) ----------
   window.__dashboard_debug = {
     tryStartMQTT: tryStartMQTT,
     getClient: () => mqttClient,
@@ -608,5 +605,4 @@
     parseTimestampToDate: parseTimestampToDate
   };
 
-})(); 
-
+})();
