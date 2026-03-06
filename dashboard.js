@@ -386,12 +386,25 @@ function updateWSStatus(connected) {
 let ignoreToggleEvents = false;
 
 function startMQTT() {
-    window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
-        username: MQTT_USERNAME,
-        password: MQTT_PASSWORD,
-        clean: true,
-        reconnectPeriod: 2000
-    });
+   window.mqttClient = mqtt.connect("wss://02164e543aa54cedb0d1c41246e8c43b.s1.eu.hivemq.cloud:8884/mqtt", {
+  username: MQTT_USERNAME,
+  password: MQTT_PASSWORD,
+  clean: false,            // mantiene sessione tra riconnessioni
+  reconnectPeriod: 5000,   // tenta riconnessione ogni 5s
+  connectTimeout: 30000,   // timeout connessione 30s
+  keepalive: 60,           // ping ogni 60s
+  clientId: 'web_' + Math.random().toString(16).substr(2,8) // clientId unico per evitare collisioni
+});
+  // <<< Inserisci qui il logging esteso (subito dopo la creazione del client)
+  mqttClient.on("connect", () => console.log("MQTT connected", new Date().toISOString()));
+  mqttClient.on("reconnect", () => console.log("MQTT reconnecting", new Date().toISOString()));
+  mqttClient.on("close", () => console.log("MQTT closed", new Date().toISOString()));
+  mqttClient.on("offline", () => console.log("MQTT offline", new Date().toISOString()));
+  mqttClient.on("error", (err) => console.error("MQTT error:", err && err.message ? err.message : err));
+  // Opzionali, utili per debug avanzato (rimuovere se troppo verbosi)
+  mqttClient.on("packetsend", (p) => console.log("MQTT packetsend", p && p.cmd));
+  mqttClient.on("packetreceive", (p) => console.log("MQTT packetreceive", p && p.cmd));
+  // >>>
 
     mqttClient.on("connect", () => {
         updateWSStatus(true);
@@ -658,5 +671,6 @@ window.startMQTT = startMQTT;
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof startMQTT === 'function') startMQTT();
 });
+
 
 
