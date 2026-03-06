@@ -509,38 +509,32 @@ document.getElementById("relay2_toggle").addEventListener("change", (e) => {
 
 // ===================== STORICO REQUEST / HELPERS =====================
 // Parser robusto per stringhe locali "YYYY-MM-DDTHH:MM[:SS]" o "YYYY-MM-DD HH:MM[:SS]"
-// Restituisce un oggetto Date locale oppure null se non valido
 function parseLocalDateTimeString(dtLocalStr) {
   if (!dtLocalStr || typeof dtLocalStr !== 'string') return null;
   const m = dtLocalStr.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!m) return null;
   const year = Number(m[1]);
-  const month = Number(m[2]); // 1-12
+  const month = Number(m[2]);
   const day = Number(m[3]);
   const hour = Number(m[4]);
   const minute = Number(m[5]);
   const second = m[6] ? Number(m[6]) : 0;
-  const d = new Date(year, month - 1, day, hour, minute, second); // costruisce Date in locale
+  const d = new Date(year, month - 1, day, hour, minute, second);
   return isNaN(d.getTime()) ? null : d;
 }
 
-// Parser robusto già presente: parseLocalDateTimeString(...)
-
-// Epoch seconds UTC (corretto)
 function toEpochSecondsUTCFromLocal(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
   return Math.floor(d.getTime() / 1000);
 }
 
-// ISO UTC dalla stringa locale
 function isoUTCFromLocalString(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
   return new Date(d.getTime()).toISOString();
 }
 
-// ISO locale con offset, es. "2026-03-05T12:00:00-06:00"
 function isoLocalWithOffset(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
@@ -554,58 +548,76 @@ function isoLocalWithOffset(dtLocalStr) {
   return `${localDatePart}${sign}${hh}:${mm}`;
 }
 
-// Offset in minuti (positivo a est di UTC)
 function tzOffsetMinutes(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
   return -d.getTimezoneOffset();
 }
 
-// helper già presente: epochSecondsAsIfUTC(dtLocalStr)
-// (se non l'hai inserito, aggiungi la funzione qui sotto)
 function epochSecondsAsIfUTC(dtLocalStr) {
   const d = parseLocalDateTimeString(dtLocalStr);
   if (!d) return null;
   return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()) / 1000);
 }
 
-// --- sostituisci la costruzione della req con questo ---
-const fromEpochUtc = toEpochSecondsUTCFromLocal(fromRaw);
-const toEpochUtc   = toEpochSecondsUTCFromLocal(toRaw);
-const fromEpochNaive = epochSecondsAsIfUTC(fromRaw);
-const toEpochNaive   = epochSecondsAsIfUTC(toRaw);
-const fromIsoUtc   = isoUTCFromLocalString(fromRaw);
-const toIsoUtc     = isoUTCFromLocalString(toRaw);
-const fromIsoLocal = isoLocalWithOffset(fromRaw);
-const toIsoLocal   = isoLocalWithOffset(toRaw);
-const tzOffsetMin  = tzOffsetMinutes(fromRaw);
+document.getElementById("btn_load_history").addEventListener("click", () => {
+  const fromRaw = document.getElementById("hist_from").value;
+  const toRaw   = document.getElementById("hist_to").value;
+  const sensors = [...document.querySelectorAll(".histCheck:checked")].map(c => c.value);
 
-const req = {
-  type: "get_history",
+  console.log("Picker raw values:", { fromRaw, toRaw });
 
-  // WORKAROUND: invia i campi che l'ESP32 sembra aspettarsi
-  // imposta i campi principali 'from' e 'to' sul valore "naive"
-  // (questo evita lo shift di -6 ore senza toccare l'ESP32)
-  from: fromEpochNaive,
-  to:   toEpochNaive,
+  if (!fromRaw || !toRaw || sensors.length === 0) {
+    alert("Seleziona almeno un sensore e un intervallo valido");
+    return;
+  }
 
-  // mantieni comunque i campi corretti/diagnostici per futuro debug
-  from_epoch_utc: fromEpochUtc,
-  to_epoch_utc:   toEpochUtc,
-  from_epoch_naive: fromEpochNaive,
-  to_epoch_naive:   toEpochNaive,
-  from_iso_utc:    fromIsoUtc,
-  to_iso_utc:      toIsoUtc,
-  from_iso_local:  fromIsoLocal,
-  to_iso_local:    toIsoLocal,
-  tz_offset_min:   tzOffsetMin,
-  sensors: sensors
-};
+  const fromEpochUtc = toEpochSecondsUTCFromLocal(fromRaw);
+  const toEpochUtc   = toEpochSecondsUTCFromLocal(toRaw);
+  const fromEpochNaive = epochSecondsAsIfUTC(fromRaw);
+  const toEpochNaive   = epochSecondsAsIfUTC(toRaw);
+  const fromIsoUtc   = isoUTCFromLocalString(fromRaw);
+  const toIsoUtc     = isoUTCFromLocalString(toRaw);
+  const fromIsoLocal = isoLocalWithOffset(fromRaw);
+  const toIsoLocal   = isoLocalWithOffset(toRaw);
+  const tzOffsetMin  = tzOffsetMinutes(fromRaw);
 
-console.log("Publishing history request (workaround):", req);
-mqttClient.publish("esp32/history/request", JSON.stringify(req));
+  console.log("Parsed history request values:", {
+    fromEpochUtc, toEpochUtc,
+    fromIsoUtc, toIsoUtc,
+    fromIsoLocal, toIsoLocal,
+    tzOffsetMin,
+    fromEpochNaive, toEpochNaive
+  });
 
- // console.log("Publishing history request:", req);
+  if (fromEpochUtc === null || toEpochUtc === null) {
+    alert("Formato data non valido. Usa il picker o YYYY-MM-DDTHH:MM");
+    return;
+  }
+
+  historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
+  chart_history_custom.data.datasets.forEach(ds => ds.data = []);
+  chart_history_custom.data.labels = [];
+  chart_history_custom.update();
+
+  const req = {
+    type: "get_history",
+    // Workaround compatibilità ESP32: invia 'from'/'to' come epoch naive
+    from: fromEpochNaive,
+    to:   toEpochNaive,
+    from_epoch_utc: fromEpochUtc,
+    to_epoch_utc:   toEpochUtc,
+    from_epoch_naive: fromEpochNaive,
+    to_epoch_naive:   toEpochNaive,
+    from_iso_utc:    fromIsoUtc,
+    to_iso_utc:      toIsoUtc,
+    from_iso_local:  fromIsoLocal,
+    to_iso_local:    toIsoLocal,
+    tz_offset_min:   tzOffsetMin,
+    sensors: sensors
+  };
+
+  console.log("Publishing history request (workaround):", req);
 
   if (window.mqttClient) {
     mqttClient.publish("esp32/history/request", JSON.stringify(req));
@@ -615,79 +627,70 @@ mqttClient.publish("esp32/history/request", JSON.stringify(req));
 });
 
 // ===================== STORICO PACKET HANDLER =====================
-// Gestione robusta dei timestamps ricevuti: supporta epoch (number o numeric string) e ISO (con o senza TZ)
 function handleHistoryPacket(d) {
-    // d.timestamps = [epoch_seconds | "1234567890" | "2026-03-05T12:00:00Z" | "2026-03-05T12:00:00"], d.data = { temp: [...], ... }, d.done boolean
-    console.log('HISTORY CHUNK raw timestamps:', d.timestamps);
+  console.log('HISTORY CHUNK raw timestamps:', d.timestamps);
 
-    const parseIncomingTimestamp = (t) => {
-      if (t === null || t === undefined) return null;
-      // number -> epoch seconds UTC
-      if (typeof t === 'number') return new Date(t * 1000);
-      // numeric string -> epoch seconds UTC
-      if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000);
-      // ISO with timezone (Z or ±hh:mm) -> Date parses correctly
-      if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+\-]\d{2}:\d{2})$/.test(t)) return new Date(t);
-      // ISO without timezone (bare "YYYY-MM-DDTHH:MM:SS") -> interpretalo come locale (coerente con picker)
-      if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) {
-        // trattalo come locale: costruisci Date con componenti
-        const m = t.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);
-        if (m) {
-          const year = Number(m[1]), month = Number(m[2]), day = Number(m[3]);
-          const hour = Number(m[4]), minute = Number(m[5]), second = Number(m[6]);
-          const local = new Date(year, month - 1, day, hour, minute, second);
-          return isNaN(local.getTime()) ? null : local;
-        }
+  const parseIncomingTimestamp = (t) => {
+    if (t === null || t === undefined) return null;
+    if (typeof t === 'number') return new Date(t * 1000);
+    if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000);
+    if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+\-]\d{2}:\d{2})$/.test(t)) return new Date(t);
+    if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) {
+      const m = t.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);
+      if (m) {
+        const year = Number(m[1]), month = Number(m[2]), day = Number(m[3]);
+        const hour = Number(m[4]), minute = Number(m[5]), second = Number(m[6]);
+        const local = new Date(year, month - 1, day, hour, minute, second);
+        return isNaN(local.getTime()) ? null : local;
       }
-      // fallback: try Date parser
-      const parsed = new Date(t);
-      return isNaN(parsed.getTime()) ? null : parsed;
-    };
-
-    if (!d.done) {
-        const newLabels = (d.timestamps || []).map(t => parseIncomingTimestamp(t)).filter(x => x !== null);
-        historyCustom.labels.push(...newLabels);
-
-        const keys = ["temp","hum","press","co2","tvoc","pm25"];
-        keys.forEach(key => {
-            if (!historyCustom[key]) historyCustom[key] = [];
-            if (d.data && d.data[key]) {
-                historyCustom[key].push(...d.data[key]);
-            } else {
-                for (let i = 0; i < newLabels.length; i++) historyCustom[key].push(null);
-            }
-        });
-        return;
     }
+    const parsed = new Date(t);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
 
-    // finalize: ensure lengths match
+  if (!d.done) {
+    const newLabels = (d.timestamps || []).map(t => parseIncomingTimestamp(t)).filter(x => x !== null);
+    historyCustom.labels.push(...newLabels);
+
     const keys = ["temp","hum","press","co2","tvoc","pm25"];
     keys.forEach(key => {
-        while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
+      if (!historyCustom[key]) historyCustom[key] = [];
+      if (d.data && d.data[key]) {
+        historyCustom[key].push(...d.data[key]);
+      } else {
+        for (let i = 0; i < newLabels.length; i++) historyCustom[key].push(null);
+      }
     });
+    return;
+  }
 
-    // populate datasets as {x:Date, y:value}
-    chart_history_custom.data.datasets.forEach(ds => {
-        const key = ds.label;
-        ds.data = historyCustom.labels.map((t, i) => {
-            const v = historyCustom[key][i];
-            return v === null ? { x: t, y: null } : { x: t, y: v };
-        });
+  const keys = ["temp","hum","press","co2","tvoc","pm25"];
+  keys.forEach(key => {
+    while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
+  });
+
+  chart_history_custom.data.datasets.forEach(ds => {
+    const key = ds.label;
+    ds.data = historyCustom.labels.map((t, i) => {
+      const v = historyCustom[key][i];
+      return v === null ? { x: t, y: null } : { x: t, y: v };
     });
+  });
 
-    updateYAxisRangeHistory();
-    updateZoomLimitsForChart(chart_history_custom, 6);
+  updateYAxisRangeHistory();
+  updateZoomLimitsForChart(chart_history_custom, 6);
 
-    if (historyCustom.labels.length > 0) {
-        const minX = historyCustom.labels[0];
-        const maxX = historyCustom.labels[historyCustom.labels.length - 1];
-        if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
-        chart_history_custom.options.scales.x.min = minX;
-        chart_history_custom.options.scales.x.max = maxX;
-    }
+  if (historyCustom.labels.length > 0) {
+    const minX = historyCustom.labels[0];
+    const maxX = historyCustom.labels[historyCustom.labels.length - 1];
+    if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
+    chart_history_custom.options.scales.x.min = minX;
+    chart_history_custom.options.scales.x.max = maxX;
+  }
 
-    chart_history_custom.update();
+  chart_history_custom.update();
 }
+
 
 
 
