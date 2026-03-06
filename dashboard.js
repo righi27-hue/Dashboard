@@ -507,7 +507,6 @@ document.getElementById("relay2_toggle").addEventListener("change", (e) => {
     sendRelayCommand(2, e.target.checked);
 });
 
-// ===================== STORICO REQUEST / HELPERS =====================
 // Converte una stringa locale "YYYY-MM-DDTHH:MM" (o con spazio) in epoch seconds UTC
 function toEpochSecondsUTCFromLocal(dtLocalStr) {
   if (!dtLocalStr || typeof dtLocalStr !== 'string') return null;
@@ -533,6 +532,12 @@ function toEpochSecondsUTCFromLocal(dtLocalStr) {
   if (isNaN(d.getTime())) return null;
   return Math.floor(d.getTime() / 1000);
 }
+
+  // Fallback: prova a creare un Date dalla stringa e usa il suo valore ms (locale -> epoch UTC)
+  const d = new Date(dtLocalStr);
+  if (isNaN(d.getTime())) return null;
+  return Math.floor(d.getTime() / 1000);
+}
 document.getElementById("btn_load_history").addEventListener("click", () => {
     let from = document.getElementById("hist_from").value;
     let to   = document.getElementById("hist_to").value;
@@ -543,12 +548,6 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
         return;
     }
 
-    // reset temporaneo
-    historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
-    chart_history_custom.data.datasets.forEach(ds => ds.data = []);
-    chart_history_custom.data.labels = [];
-    chart_history_custom.update();
-
     // Usa la conversione UTC dal picker locale
     const fromEpoch = toEpochSecondsUTCFromLocal(from);
     const toEpoch   = toEpochSecondsUTCFromLocal(to);
@@ -557,24 +556,44 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
         return;
     }
 
+    // Log diagnostici temporanei (rimuovere in produzione)
+    console.log('REQ from epoch:', fromEpoch, 'ISO:', new Date(fromEpoch * 1000).toISOString());
+    console.log('REQ   to epoch:', toEpoch,   'ISO:', new Date(toEpoch * 1000).toISOString());
+
     let req = {
-        type: "get_history",
-        from: fromEpoch,
-        to:   toEpoch,
-        sensors: sensors
+      type: "get_history",
+      from: fromEpoch,
+      to:   toEpoch,
+      from_iso: new Date(fromEpoch * 1000).toISOString(),
+      to_iso:   new Date(toEpoch * 1000).toISOString(),
+      sensors: sensors
     };
 
+    // reset temporaneo UI/dati
+    historyCustom = { labels: [], temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
+    chart_history_custom.data.datasets.forEach(ds => ds.data = []);
+    chart_history_custom.data.labels = [];
+    chart_history_custom.update();
+
     if (window.mqttClient) {
-        mqttClient.publish("esp32/history/request", JSON.stringify(req));
+      mqttClient.publish("esp32/history/request", JSON.stringify(req));
     } else {
-        alert("MQTT non connesso");
+      alert("MQTT non connesso");
     }
-});
+}); // chiusura listener
 
 // ===================== STORICO PACKET HANDLER =====================
 // Interpreta i timestamps ricevuti come epoch seconds UTC e li converte in Date UTC
 function handleHistoryPacket(d) {
     // d.timestamps = [epoch_seconds,...], d.data = { temp: [...], ... }, d.done boolean
+  // Debug: mostra i timestamps raw e la loro interpretazione ISO
+console.log('HISTORY CHUNK raw timestamps:', d.timestamps);
+console.log('HISTORY CHUNK -> ISO:', (d.timestamps || []).map(t => {
+  if (typeof t === 'number') return new Date(t * 1000).toISOString();
+  if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000).toISOString();
+  if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) return (t + 'Z');
+  return t;
+}));
     if (!d.done) {
         // timestamps are epoch seconds from ESP32 -> convert to Date UTC
         const newLabels = (d.timestamps || []).map(t => {
@@ -627,4 +646,5 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
 
