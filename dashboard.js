@@ -509,20 +509,23 @@ document.getElementById("relay2_toggle").addEventListener("change", (e) => {
 
 // ===================== STORICO REQUEST / HELPERS =====================
 // Converte una stringa locale "YYYY-MM-DDTHH:MM" (o con spazio) in epoch seconds UTC
+// Sostituire la funzione esistente con questa
 function toEpochSecondsUTCFromLocal(dtLocalStr) {
-    if (!dtLocalStr || typeof dtLocalStr !== 'string') return null;
-    const m = dtLocalStr.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?$/);
-    if (m) {
-        const year = Number(m[1]);
-        const month = Number(m[2]); // 1-12
-        const day = Number(m[3]);
-        const hour = Number(m[4]);
-        const minute = Number(m[5]);
-        const second = m[6] ? Number(m[6]) : 0;
-        // Date.UTC restituisce ms dall'epoch in UTC
-        const utcMs = Date.UTC(year, month - 1, day, hour, minute, second);
-        return Math.floor(utcMs / 1000);
-    }
+  if (!dtLocalStr || typeof dtLocalStr !== 'string') return null;
+  const m = dtLocalStr.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (m) {
+    const year = Number(m[1]), month = Number(m[2]), day = Number(m[3]);
+    const hour = Number(m[4]), minute = Number(m[5]), second = m[6] ? Number(m[6]) : 0;
+    // Costruisce un Date locale (anno, meseIndex, giorno, ora, min, sec)
+    const localDate = new Date(year, month - 1, day, hour, minute, second);
+    if (isNaN(localDate.getTime())) return null;
+    return Math.floor(localDate.getTime() / 1000); // epoch seconds UTC
+  }
+  // Fallback robusto: prova a creare Date e convertire da locale a UTC
+  const d = new Date(dtLocalStr);
+  if (isNaN(d.getTime())) return null;
+  return Math.floor(d.getTime() / 1000);
+}
     // Fallback: se il formato è diverso, usa Date e correggi con timezone offset
     const d = new Date(dtLocalStr);
     if (isNaN(d.getTime())) return null;
@@ -625,3 +628,4 @@ function handleHistoryPacket(d) {
 
     chart_history_custom.update();
 }
+
