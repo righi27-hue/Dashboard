@@ -122,18 +122,26 @@ function getChartTimeBounds(chart) {
 function updateZoomLimitsForChart(chart, maxZoomOutFactor = 6) {
   const bounds = getChartTimeBounds(chart);
   if (!bounds) {
-    chart.options.plugins.zoom.zoom.limits.x.maxRange = Number.MAX_SAFE_INTEGER;
-    chart.options.plugins.zoom.zoom.limits.x.minRange = 1000 * 10;
-    delete chart.options.scales.x.min;
-    delete chart.options.scales.x.max;
+    if (chart.options && chart.options.plugins && chart.options.plugins.zoom && chart.options.plugins.zoom.zoom && chart.options.plugins.zoom.zoom.limits && chart.options.plugins.zoom.zoom.limits.x) {
+      chart.options.plugins.zoom.zoom.limits.x.maxRange = Number.MAX_SAFE_INTEGER;
+      chart.options.plugins.zoom.zoom.limits.x.minRange = 1000 * 10;
+    }
+    if (chart.options && chart.options.scales && chart.options.scales.x) {
+      delete chart.options.scales.x.min;
+      delete chart.options.scales.x.max;
+    }
     return;
   }
   const dataRange = bounds.max - bounds.min;
   const maxRange = Math.max(dataRange * maxZoomOutFactor, 1000 * 60);
-  chart.options.plugins.zoom.zoom.limits.x.maxRange = maxRange;
+  if (chart.options && chart.options.plugins && chart.options.plugins.zoom && chart.options.plugins.zoom.zoom && chart.options.plugins.zoom.zoom.limits && chart.options.plugins.zoom.zoom.limits.x) {
+    chart.options.plugins.zoom.zoom.limits.x.maxRange = maxRange;
+  }
   // Mantieni i limiti dell'asse per evitare pan oltre i dati
-  chart.options.scales.x.min = new Date(bounds.min);
-  chart.options.scales.x.max = new Date(bounds.max);
+  if (chart.options && chart.options.scales && chart.options.scales.x) {
+    chart.options.scales.x.min = new Date(bounds.min);
+    chart.options.scales.x.max = new Date(bounds.max);
+  }
 }
 
 function clampViewToDataIfNeeded(chart, maxZoomOutFactor = 6) {
@@ -533,11 +541,6 @@ function toEpochSecondsUTCFromLocal(dtLocalStr) {
   return Math.floor(d.getTime() / 1000);
 }
 
-  // Fallback: prova a creare un Date dalla stringa e usa il suo valore ms (locale -> epoch UTC)
-  const d = new Date(dtLocalStr);
-  if (isNaN(d.getTime())) return null;
-  return Math.floor(d.getTime() / 1000);
-}
 document.getElementById("btn_load_history").addEventListener("click", () => {
     let from = document.getElementById("hist_from").value;
     let to   = document.getElementById("hist_to").value;
@@ -585,66 +588,75 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
 // ===================== STORICO PACKET HANDLER =====================
 // Interpreta i timestamps ricevuti come epoch seconds UTC e li converte in Date UTC
 function handleHistoryPacket(d) {
-    // d.timestamps = [epoch_seconds,...], d.data = { temp: [...], ... }, d.done boolean
   // Debug: mostra i timestamps raw e la loro interpretazione ISO
-console.log('HISTORY CHUNK raw timestamps:', d.timestamps);
-console.log('HISTORY CHUNK -> ISO:', (d.timestamps || []).map(t => {
-  if (typeof t === 'number') return new Date(t * 1000).toISOString();
-  if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000).toISOString();
-  if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) return (t + 'Z');
-  return t;
-}));
-    if (!d.done) {
-        // timestamps are epoch seconds from ESP32 -> convert to Date UTC
-        const newLabels = (d.timestamps || []).map(t => {
-            // robust handling: number or numeric string
-            if (typeof t === 'number') return new Date(t * 1000);
-            if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000);
-            // fallback: try ISO parsing (treat bare ISO without TZ as UTC)
-            if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) return new Date(t + 'Z');
-            const parsed = new Date(t);
-            return isNaN(parsed.getTime()) ? null : parsed;
-        }).filter(x => x !== null);
-        historyCustom.labels.push(...newLabels);
+  console.log('HISTORY CHUNK raw timestamps:', d.timestamps);
+  console.log('HISTORY CHUNK -> ISO:', (d.timestamps || []).map(t => {
+    if (typeof t === 'number') return new Date(t * 1000).toISOString();
+    if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000).toISOString();
+    if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) return (t + 'Z');
+    return t;
+  }));
 
-        const keys = ["temp","hum","press","co2","tvoc","pm25"];
-        keys.forEach(key => {
-            if (!historyCustom[key]) historyCustom[key] = [];
-            if (d.data && d.data[key]) {
-                historyCustom[key].push(...d.data[key]);
-            } else {
-                for (let i = 0; i < newLabels.length; i++) historyCustom[key].push(null);
-            }
-        });
-        return;
-    }
+  // d.timestamps = [epoch_seconds,...], d.data = { temp: [...], ... }, d.done boolean
+  if (!d.done) {
+    // timestamps are epoch seconds from ESP32 -> convert to Date UTC
+    const newLabels = (d.timestamps || []).map(t => {
+        // robust handling: number or numeric string
+        if (typeof t === 'number') return new Date(t * 1000);
+        if (typeof t === 'string' && /^\d+$/.test(t)) return new Date(Number(t) * 1000);
+        // fallback: try ISO parsing (treat bare ISO without TZ as UTC)
+        if (typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) return new Date(t + 'Z');
+        const parsed = new Date(t);
+        return isNaN(parsed.getTime()) ? null : parsed;
+    }).filter(x => x !== null);
+    historyCustom.labels.push(...newLabels);
 
-    // finalize: ensure lengths match
     const keys = ["temp","hum","press","co2","tvoc","pm25"];
     keys.forEach(key => {
-        while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
+        if (!historyCustom[key]) historyCustom[key] = [];
+        if (d.data && d.data[key]) {
+            historyCustom[key].push(...d.data[key]);
+        } else {
+            for (let i = 0; i < newLabels.length; i++) historyCustom[key].push(null);
+        }
     });
+    return;
+  }
 
-    // populate datasets as {x:Date, y:value}
-    chart_history_custom.data.datasets.forEach(ds => {
-        const key = ds.label;
-        ds.data = historyCustom.labels.map((t, i) => {
-            const v = historyCustom[key][i];
-            return v === null ? { x: t, y: null } : { x: t, y: v };
-        });
-    });
+  // finalize: ensure lengths match
+  const keys = ["temp","hum","press","co2","tvoc","pm25"];
+  keys.forEach(key => {
+      while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
+  });
 
-    updateYAxisRangeHistory();
-    updateZoomLimitsForChart(chart_history_custom, 6);
-    if (historyCustom.labels.length > 0) {
-        const minX = historyCustom.labels[0];
-        const maxX = historyCustom.labels[historyCustom.labels.length - 1];
-        if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
-        chart_history_custom.options.scales.x.min = minX;
-        chart_history_custom.options.scales.x.max = maxX;
-    }
+  // populate datasets as {x:Date, y:value}
+  chart_history_custom.data.datasets.forEach(ds => {
+      const key = ds.label;
+      ds.data = historyCustom.labels.map((t, i) => {
+          const v = historyCustom[key][i];
+          return v === null ? { x: t, y: null } : { x: t, y: v };
+      });
+  });
 
-    chart_history_custom.update();
+  updateYAxisRangeHistory();
+  updateZoomLimitsForChart(chart_history_custom, 6);
+  if (historyCustom.labels.length > 0) {
+      const minX = historyCustom.labels[0];
+      const maxX = historyCustom.labels[historyCustom.labels.length - 1];
+      if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
+      chart_history_custom.options.scales.x.min = minX;
+      chart_history_custom.options.scales.x.max = maxX;
+  }
+
+  chart_history_custom.update();
 }
+
+// Rendi startMQTT disponibile globalmente
+window.startMQTT = startMQTT;
+
+// Avvia la connessione in modo sicuro quando il DOM è pronto
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof startMQTT === 'function') startMQTT();
+});
 
 
