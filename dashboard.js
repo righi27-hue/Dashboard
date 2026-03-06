@@ -641,7 +641,7 @@ document.getElementById("btn_load_history").addEventListener("click", () => {
   }
 });
 
-// handleHistoryPacket: robusto, rileva doppia applicazione e sceglie la correzione migliore
+// handleHistoryPacket: robusto, raccoglie chunk raw e decide globalmente 0/1/2 correzioni
 function handleHistoryPacket(d) {
   console.log('HISTORY CHUNK payload:', d);
   if (!d || typeof d !== 'object') return;
@@ -652,152 +652,206 @@ function handleHistoryPacket(d) {
   const reqFrom = req ? req.fromEpochUtc : null;
   const reqTo   = req ? req.toEpochUtc : null;
 
+  if (!window._historyRawChunks) window._historyRawChunks = [];
+  if (!window._historyChunkChoices) window._historyChunkChoices = [];
+
   const rawTs = Array.isArray(d.timestamps) ? d.timestamps : [];
   if (!rawTs.length && !d.done) return;
 
-  const applyCorrection = (epochSec, tzMinToUse, times = 0) => {
-    if (typeof epochSec !== 'number') epochSec = Number(epochSec);
-    if (isNaN(epochSec)) return null;
-    if (typeof tzMinToUse !== 'number' || times === 0) {
-      return new Date(epochSec * 1000);
-    }
-    // CORRETTO: sottrai tzMin (tzMin è -d.getTimezoneOffset()), times volte
-    const corrected = epochSec - (times * tzMinToUse * 60);
-    return new Date(corrected * 1000);
+  const applyCorrectionToEpoch = (epochSec, tzMinToUse, times = 0) => {
+    if (epochSec == null) return null;
+    const e = Number(epochSec);
+    if (isNaN(e)) return null;
+    if (typeof tzMinToUse !== 'number' || times === 0) return Math.floor(e);
+    return Math.floor(e - (times * tzMinToUse * 60));
   };
 
   const sampleRaw = rawTs.find(x => x != null);
-  let chosenTimes = 0;
-  let tzUsed = null;
+  let localChoice = { chosenTimes: 0, tzUsed: null, sampleDates: {} };
 
   if (sampleRaw != null) {
     const candidates = [];
-    candidates.push({ times: 0, tz: null, date: applyCorrection(sampleRaw, null, 0) });
-
+    candidates.push({ times: 0, tz: null, epoch: applyCorrectionToEpoch(sampleRaw, null, 0) });
     if (typeof chunkTz === 'number') {
-      candidates.push({ times: 1, tz: chunkTz, date: applyCorrection(sampleRaw, chunkTz, 1) });
-      candidates.push({ times: 2, tz: chunkTz, date: applyCorrection(sampleRaw, chunkTz, 2) });
+      candidates.push({ times: 1, tz: chunkTz, epoch: applyCorrectionToEpoch(sampleRaw, chunkTz, 1) });
+      candidates.push({ times: 2, tz: chunkTz, epoch: applyCorrectionToEpoch(sampleRaw, chunkTz, 2) });
     }
     if (typeof clientTz === 'number') {
-      candidates.push({ times: 1, tz: clientTz, date: applyCorrection(sampleRaw, clientTz, 1) });
-      candidates.push({ times: 2, tz: clientTz, date: applyCorrection(sampleRaw, clientTz, 2) });
+      candidates.push({ times: 1, tz: clientTz, epoch: applyCorrectionToEpoch(sampleRaw, clientTz, 1) });
+      candidates.push({ times: 2, tz: clientTz, epoch: applyCorrectionToEpoch(sampleRaw, clientTz, 2) });
     }
 
     const uniq = [];
     const seen = new Set();
     candidates.forEach(c => {
-      if (!c.date || isNaN(c.date.getTime())) return;
-      const key = c.date.getTime() + '|' + c.times + '|' + c.tz;
+      if (c.epoch == null || isNaN(c.epoch)) return;
+      const key = c.epoch + '|' + c.times + '|' + c.tz;
       if (!seen.has(key)) { seen.add(key); uniq.push(c); }
     });
 
     if (reqFrom !== null && reqTo !== null && uniq.length) {
-      const inRange = uniq.filter(c => {
-        const s = Math.floor(c.date.getTime() / 1000);
-        return s >= reqFrom && s <= reqTo;
-      });
+      const inRange = uniq.filter(c => c.epoch >= reqFrom && c.epoch <= reqTo);
       if (inRange.length === 1) {
-        chosenTimes = inRange[0].times;
-        tzUsed = inRange[0].tz;
+        localChoice.chosenTimes = inRange[0].times;
+        localChoice.tzUsed = inRange[0].tz;
       } else if (inRange.length > 1) {
         const prefer = inRange.find(c => c.tz === chunkTz) || inRange.find(c => c.tz === clientTz) || inRange.find(c => c.times === 1);
-        chosenTimes = prefer.times;
-        tzUsed = prefer.tz;
+        localChoice.chosenTimes = prefer.times;
+        localChoice.tzUsed = prefer.tz;
       } else {
         const center = (reqFrom + reqTo) / 2;
-        let best = null; let bestDiff = Infinity;
+        let best = null, bestDiff = Infinity;
         uniq.forEach(c => {
-          const diff = Math.abs(Math.floor(c.date.getTime() / 1000) - center);
+          const diff = Math.abs(c.epoch - center);
           if (diff < bestDiff) { bestDiff = diff; best = c; }
         });
-        if (best) { chosenTimes = best.times; tzUsed = best.tz; }
+        if (best) { localChoice.chosenTimes = best.times; localChoice.tzUsed = best.tz; }
       }
     } else {
-      if (chunkTz !== null) { chosenTimes = 1; tzUsed = chunkTz; }
-      else if (clientTz !== null) { chosenTimes = 1; tzUsed = clientTz; }
-      else { chosenTimes = 0; tzUsed = null; }
+      if (chunkTz !== null) { localChoice.chosenTimes = 1; localChoice.tzUsed = chunkTz; }
+      else if (clientTz !== null) { localChoice.chosenTimes = 1; localChoice.tzUsed = clientTz; }
+      else { localChoice.chosenTimes = 0; localChoice.tzUsed = null; }
     }
 
-    console.log('history: sampleRaw', sampleRaw,
-                'chosenTimes', chosenTimes, 'tzUsed', tzUsed,
-                'sampleDates:',
-                'noCorr', applyCorrection(sampleRaw, null, 0).toString(),
-                'oneCorr(chunk?)', (chunkTz!==null?applyCorrection(sampleRaw, chunkTz,1).toString():'n/a'),
-                'oneCorr(client?)', (clientTz!==null?applyCorrection(sampleRaw, clientTz,1).toString():'n/a'));
+    localChoice.sampleDates.noCorr = new Date(applyCorrectionToEpoch(sampleRaw, null, 0) * 1000).toString();
+    if (chunkTz !== null) localChoice.sampleDates.oneCorrChunk = new Date(applyCorrectionToEpoch(sampleRaw, chunkTz, 1) * 1000).toString();
+    if (clientTz !== null) localChoice.sampleDates.oneCorrClient = new Date(applyCorrectionToEpoch(sampleRaw, clientTz, 1) * 1000).toString();
   }
 
-  const tzToApply = (tzUsed !== null) ? tzUsed : (clientTz !== null ? clientTz : chunkTz);
-  const finalDates = rawTs.map(t => {
-    if (t == null) return null;
-    if (typeof t === 'number' || (typeof t === 'string' && /^\d+$/.test(t))) {
-      const epochSec = Number(t);
-      if (chosenTimes === 0 || typeof tzToApply !== 'number') {
-        return new Date(epochSec * 1000);
-      } else {
-        const corrected = epochSec - (chosenTimes * tzToApply * 60);
-        return new Date(corrected * 1000);
-      }
-    }
-    const dt = new Date(t);
-    return isNaN(dt.getTime()) ? null : dt;
-  }).filter(x => x !== null);
+  window._historyRawChunks.push({
+    timestamps: rawTs.slice(),
+    data: d.data ? JSON.parse(JSON.stringify(d.data)) : null,
+    chunkId: d.chunkId || null,
+    localChoice: localChoice,
+    chunkTz: chunkTz
+  });
+  window._historyChunkChoices.push(localChoice);
 
-  if (finalDates.length) historyCustom.labels.push(...finalDates);
+  console.log('chunk saved; localChoice:', localChoice);
 
-  const keys = ["temp","hum","press","co2","tvoc","pm25"];
-  keys.forEach(key => {
-    if (!historyCustom[key]) historyCustom[key] = [];
-    if (d.data && Array.isArray(d.data[key]) && d.data[key].length) {
-      historyCustom[key].push(...d.data[key]);
-    } else if (finalDates.length) {
-      for (let i = 0; i < finalDates.length; i++) historyCustom[key].push(null);
+  if (!d.done) {
+    if (window.mqttClient && d.chunkId != null) {
+      try { mqttClient.publish("esp32/history/ack", JSON.stringify({ chunkId: d.chunkId })); } catch(e) {}
     }
+    return;
+  }
+
+  const modes = [0,1,2];
+  const modeScores = { 0:0, 1:0, 2:0 };
+
+  window._historyRawChunks.forEach(chunk => {
+    const tsArr = Array.isArray(chunk.timestamps) ? chunk.timestamps : [];
+    tsArr.forEach(t => {
+      if (t == null) return;
+      modes.forEach(m => {
+        const tzToUse = (typeof chunk.chunkTz === 'number') ? chunk.chunkTz : clientTz;
+        const epochCandidate = applyCorrectionToEpoch(t, tzToUse, m);
+        if (epochCandidate == null) return;
+        if (reqFrom !== null && reqTo !== null) {
+          if (epochCandidate >= reqFrom && epochCandidate <= reqTo) modeScores[m]++;
+        } else {
+          modeScores[m]++;
+        }
+      });
+    });
   });
 
-  if (d.done) {
-    keys.forEach(key => {
-      while (historyCustom[key].length < historyCustom.labels.length) historyCustom[key].push(null);
+  let bestMode = 0;
+  let bestScore = -1;
+  [1,0,2].forEach(m => {
+    if (modeScores[m] > bestScore) { bestScore = modeScores[m]; bestMode = m; }
+  });
+
+  console.log('history: modeScores', modeScores, 'bestMode', bestMode);
+
+  const allLabels = [];
+  const allSeries = { temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
+
+  window._historyRawChunks.forEach(chunk => {
+    const tsArr = Array.isArray(chunk.timestamps) ? chunk.timestamps : [];
+    const tzToUse = (typeof chunk.chunkTz === 'number') ? chunk.chunkTz : clientTz;
+    tsArr.forEach((t, idx) => {
+      if (t == null) {
+        allLabels.push(null);
+      } else {
+        const epochSec = applyCorrectionToEpoch(t, tzToUse, bestMode);
+        allLabels.push(new Date(epochSec * 1000));
+      }
+      if (chunk.data) {
+        allSeries.temp.push(chunk.data.temp && chunk.data.temp[idx] !== undefined ? chunk.data.temp[idx] : null);
+        allSeries.hum.push(chunk.data.hum && chunk.data.hum[idx] !== undefined ? chunk.data.hum[idx] : null);
+        allSeries.press.push(chunk.data.press && chunk.data.press[idx] !== undefined ? chunk.data.press[idx] : null);
+        allSeries.co2.push(chunk.data.co2 && chunk.data.co2[idx] !== undefined ? chunk.data.co2[idx] : null);
+        allSeries.tvoc.push(chunk.data.tvoc && chunk.data.tvoc[idx] !== undefined ? chunk.data.tvoc[idx] : null);
+        allSeries.pm25.push(chunk.data.pm25 && chunk.data.pm25[idx] !== undefined ? chunk.data.pm25[idx] : null);
+      } else {
+        allSeries.temp.push(null); allSeries.hum.push(null); allSeries.press.push(null);
+        allSeries.co2.push(null); allSeries.tvoc.push(null); allSeries.pm25.push(null);
+      }
     });
+  });
 
-    const combined = historyCustom.labels.map((dt, i) => ({ t: dt.getTime(), i }));
-    combined.sort((a,b) => a.t - b.t);
-    const unique = [];
-    const seen = new Set();
-    combined.forEach(c => {
-      if (!seen.has(c.t)) { seen.add(c.t); unique.push(c); }
-    });
-    const sortedLabels = unique.map(u => new Date(u.t));
-
-    const rebuilt = {};
-    keys.forEach(k => rebuilt[k] = []);
-    sortedLabels.forEach((lbl, idx) => {
-      const orig = combined.find(c => c.t === lbl.getTime());
-      const origIndex = orig ? orig.i : null;
-      keys.forEach(k => {
-        rebuilt[k].push(origIndex !== null && historyCustom[k][origIndex] !== undefined ? historyCustom[k][origIndex] : null);
-      });
-    });
-
-    historyCustom.labels = sortedLabels;
-    keys.forEach(k => historyCustom[k] = rebuilt[k]);
-
-    chart_history_custom.data.datasets.forEach(ds => {
-      const key = ds.label;
-      ds.data = historyCustom.labels.map((t, i) => {
-        const v = historyCustom[key][i];
-        return v === null ? { x: t, y: null } : { x: t, y: v };
-      });
-    });
-
-    updateYAxisRangeHistory();
-    updateZoomLimitsForChart(chart_history_custom, 6);
-
-    if (historyCustom.labels.length) {
-      chart_history_custom.options.scales.x.min = historyCustom.labels[0];
-      chart_history_custom.options.scales.x.max = historyCustom.labels[historyCustom.labels.length - 1];
-      if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
-    }
-
-    chart_history_custom.update();
+  const filteredLabels = [];
+  const filteredSeries = { temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
+  for (let i = 0; i < allLabels.length; i++) {
+    if (!allLabels[i]) continue;
+    filteredLabels.push(allLabels[i]);
+    filteredSeries.temp.push(allSeries.temp[i]);
+    filteredSeries.hum.push(allSeries.hum[i]);
+    filteredSeries.press.push(allSeries.press[i]);
+    filteredSeries.co2.push(allSeries.co2[i]);
+    filteredSeries.tvoc.push(allSeries.tvoc[i]);
+    filteredSeries.pm25.push(allSeries.pm25[i]);
   }
+
+  const combined = filteredLabels.map((dt, i) => ({ t: dt.getTime(), i }));
+  combined.sort((a,b) => a.t - b.t);
+  const unique = [];
+  const seen = new Set();
+  combined.forEach(c => { if (!seen.has(c.t)) { seen.add(c.t); unique.push(c); } });
+
+  const sortedLabels = unique.map(u => new Date(u.t));
+  const rebuilt = { temp: [], hum: [], press: [], co2: [], tvoc: [], pm25: [] };
+  unique.forEach(u => {
+    const idx = u.i;
+    rebuilt.temp.push(filteredSeries.temp[idx] !== undefined ? filteredSeries.temp[idx] : null);
+    rebuilt.hum.push(filteredSeries.hum[idx] !== undefined ? filteredSeries.hum[idx] : null);
+    rebuilt.press.push(filteredSeries.press[idx] !== undefined ? filteredSeries.press[idx] : null);
+    rebuilt.co2.push(filteredSeries.co2[idx] !== undefined ? filteredSeries.co2[idx] : null);
+    rebuilt.tvoc.push(filteredSeries.tvoc[idx] !== undefined ? filteredSeries.tvoc[idx] : null);
+    rebuilt.pm25.push(filteredSeries.pm25[idx] !== undefined ? filteredSeries.pm25[idx] : null);
+  });
+
+  historyCustom.labels = sortedLabels;
+  historyCustom.temp = rebuilt.temp;
+  historyCustom.hum = rebuilt.hum;
+  historyCustom.press = rebuilt.press;
+  historyCustom.co2 = rebuilt.co2;
+  historyCustom.tvoc = rebuilt.tvoc;
+  historyCustom.pm25 = rebuilt.pm25;
+
+  chart_history_custom.data.datasets.forEach(ds => {
+    const key = ds.label;
+    ds.data = historyCustom.labels.map((t, i) => {
+      const v = historyCustom[key][i];
+      return v === null ? { x: t, y: null } : { x: t, y: v };
+    });
+  });
+
+  updateYAxisRangeHistory();
+  updateZoomLimitsForChart(chart_history_custom, 6);
+
+  if (historyCustom.labels.length) {
+    chart_history_custom.options.scales.x.min = historyCustom.labels[0];
+    chart_history_custom.options.scales.x.max = historyCustom.labels[historyCustom.labels.length - 1];
+    if (chart_history_custom.resetZoom) chart_history_custom.resetZoom();
+  }
+
+  chart_history_custom.update();
+
+  console.log('history: chunkChoicesSummary', window._historyChunkChoices);
+  console.log('history: globalChoice bestMode', bestMode, 'modeScores', modeScores);
+
+  window._historyRawChunks = null;
+  window._historyChunkChoices = null;
 }
