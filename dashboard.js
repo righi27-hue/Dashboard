@@ -59,7 +59,7 @@ function createGauge(ctx, color) {
             label: function(context){
               const label = context.label;
               const value = context.raw;
-              return label + ': ' + value.toFixed(1) + '%';
+              return label + ': ' + Math.round(value) + '%';
             }
           }
         }
