@@ -54,17 +54,16 @@ function createGauge(ctx, color) {
       animation:{duration:120},
       plugins:{
         legend:{display:false},
-        tooltip:{
-          padding: 10,
-          bodyFont: { size: 14 },
-          callbacks:{
-            label: function(context){
-              const label = context.label;
-              const value = context.raw;
-              return label + ': ' + value.toFixed(1) + '%';
-            }
-          }
-        }
+tooltip:{
+  bodyFont: { size: 14 },
+  callbacks:{
+    label: function(context){
+      const label = context.label;
+      const value = context.raw;
+      return label + ': ' + value.toFixed(1) + '%' + ' ';
+    }
+  }
+}
       },
       maintainAspectRatio: false
     }
