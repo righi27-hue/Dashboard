@@ -55,7 +55,7 @@ function createGauge(ctx, color) {
       plugins:{
         legend:{display:false},
         tooltip:{
-          padding: 12,
+          padding: 16,
           bodyFont: { size: 14 },
           callbacks:{
             label: function(context){
