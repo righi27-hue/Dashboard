@@ -55,11 +55,12 @@ function createGauge(ctx, color) {
       plugins:{
         legend:{display:false},
         tooltip:{
+          displayColors: false, 
           callbacks:{
             label: function(context){
               const label = context.label;
-              const value = context.raw;
-              return label + ': ' + Math.round(value) + '%';
+              const value = Math.round(context.raw); // parte intera
+              return label + ': ' + value + ' %';     // spazio prima di %
             }
           }
         }
