@@ -55,11 +55,13 @@ function createGauge(ctx, color) {
       plugins:{
         legend:{display:false},
         tooltip:{
+          padding: 12,
+          bodyFont: { size: 14 },
           callbacks:{
             label: function(context){
-              const label = context.label;   // "Actual" o "Remain"
-              const value = context.raw;     // numero grezzo
-              return label + ': ' + value + '%';
+              const label = context.label;
+              const value = context.raw;
+              return label + ': ' + value.toFixed(1) + '%';
             }
           }
         }
