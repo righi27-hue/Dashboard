@@ -42,7 +42,7 @@ function createGauge(ctx, color) {
   return new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: ['Valore','Restante'],
+      labels: ['Actual','Remain'],
       datasets: [{
         data:[0,100],
         backgroundColor:[color,'#333'],
@@ -52,7 +52,18 @@ function createGauge(ctx, color) {
     options: {
       cutout:'70%',
       animation:{duration:120},
-      plugins:{legend:{display:false}},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            label: function(context){
+              const label = context.label;   // "Actual" o "Remain"
+              const value = context.raw;     // numero grezzo
+              return label + ': ' + value + '%';
+            }
+          }
+        }
+      },
       maintainAspectRatio: false
     }
   });
